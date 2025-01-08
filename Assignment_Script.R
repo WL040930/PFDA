@@ -1,0 +1,53 @@
+# Lim Wei Lun - TP069058
+# Goh Xin Tong - TP069712
+
+# Purpose: Clean the dataset by removing duplicate rows
+
+# Data Overview:
+# - data: Original CSV data
+# - data_unique: Cleaned data after removing duplicate rows
+# - duplicate_rows: Subset containing only the duplicate rows
+# - duplicates: Logical vector indicating duplicate rows
+
+# Import required library
+if (!requireNamespace("readxl", quietly = TRUE)) {
+  install.packages("readxl") # Install the readxl package if not already installed
+}
+
+library(readxl) # Load the readxl library
+
+# Declare file path
+FILE_PATH <- "C:\\Users\\limwe\\OneDrive - Asia Pacific University of Technology And Innovation (APU)\\degree\\Year 2 Sem 1\\PFDA\\assignment\\4.hackingdata.csv"
+
+# Import the CSV file into R
+data <- read.csv(FILE_PATH, stringsAsFactors = FALSE) # Read CSV without converting strings to factors
+
+# Display summary of the original data
+cat("Summary of the original data:\n")
+print(summary(data))
+
+# Check for duplicate rows
+cat("\nChecking for duplicate rows...\n")
+duplicates <- duplicated(data) # Create a logical vector to mark duplicate rows
+
+# Identify and display duplicate rows if present
+if (any(duplicates)) {
+  cat("\nDuplicate rows found:\n")
+  duplicate_rows <- data[duplicates, ] # Extract the duplicate rows
+  print(duplicate_rows)
+} else {
+  cat("\nNo duplicate rows found.\n")
+}
+
+# Remove duplicate rows
+data_unique <- data[!duplicates, ] # Retain only unique rows
+
+# Display summary of the cleaned data
+cat("\nSummary of the cleaned data:\n")
+print(summary(data_unique))
+
+
+# End of script
+cat("\nDuplicate removal process completed successfully.\n")
+
+sum(is.na(data_unique))
