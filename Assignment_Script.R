@@ -11,18 +11,47 @@
 # - duplicate_rows: Subset containing only the duplicate rows
 # - duplicates: Logical vector indicating duplicate rows
 
+#-----------------------------------------------------------------
+
 # Import required library
 if (!requireNamespace("readxl", quietly = TRUE)) {
   install.packages("readxl") # Install the readxl package if not already installed
 }
+if (!requireNamespace("dplyr", quietly = TRUE)) {
+  install.packages("dplyr")
+}
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  install.packages("ggplot2")
+}
+if (!requireNamespace("DBI", quietly = TRUE)) {
+  install.packages("DBI")
+}
+if (!requireNamespace("RSQLite", quietly = TRUE)) {
+  install.packages("RSQLite")
+}
 
 library(readxl) # Load the readxl library
+library(dplyr)
+library(ggplot2)
+library(DBI)
+library(RSQLite)
+
+
+#-----------------------------------------------------------------
 
 # Declare file path
-FILE_PATH <- "C:\\Users\\limwe\\OneDrive - Asia Pacific University of Technology And Innovation (APU)\\degree\\Year 2 Sem 1\\PFDA\\assignment\\4.hackingdata.csv"
+FILE_PATH <- "C:\\Users\\user\\New folder (2)\\OneDrive - Asia Pacific University\\APU Degree\\YEAR2 SEM1\\PFDA\\PFDA Assigment\\4.hackingdata.csv"
 
-# Import the CSV file into R
+# Import the 4.hackingdata.csv file
 data <- read.csv(FILE_PATH, stringsAsFactors = FALSE) # Read CSV without converting strings to factors
+
+#-----------------------------------------------------------------
+
+# Output the 4.hackingdata.csv file
+View(data)
+
+#-----------------------------------------------------------------
+
 
 # Display summary of the original data
 cat("Summary of the original data:\n")
