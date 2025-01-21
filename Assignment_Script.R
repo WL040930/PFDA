@@ -1,5 +1,7 @@
 # Lim Wei Lun - TP069058
 # Goh Xin Tong - TP069712
+# Chang Qi Eue - TP065956
+# Lee Jun Zhe - TP065879
 
 # Purpose: Clean the dataset by removing duplicate rows
 
