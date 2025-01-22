@@ -56,9 +56,12 @@ colnames(data) <- tolower(colnames(data))
 
 #-----------------------------------------------------------------
 
-# Replace missing values for specific columns
+# Replace missing values to NA
 data = replace(data, data == "", NA)
 
+#-----------------------------------------------------------------
+
+# Replace missing values for specific columns
 data$date[is.na(data$date)] <- "Unknown"
 data$notify[is.na(data$notify)] <- "Unknown"
 data$url[is.na(data$url)] <- "Unknown"
@@ -74,6 +77,9 @@ data$ransom[is.na(data$ransom)] <- NA
 data$downtime[is.na(data$downtime)] <- NA
 data$loss[is.na(data$loss)] <- NA
 
+#-----------------------------------------------------------------
+
+#Change "Unkno" and "UNKNOWN" to "Unknown"
 data$os[data$os == "Unkno"] <- "Unknown"
 data$country[data$country == "UNKNOWN"] <- "Unknown"
 
