@@ -36,7 +36,6 @@ library(ggplot2)
 library(DBI)
 library(RSQLite)
 
-
 #-----------------------------------------------------------------
 
 # Declare file path
@@ -52,6 +51,33 @@ View(data)
 
 #-----------------------------------------------------------------
 
+#change all titles to lowercase
+colnames(data) <- tolower(colnames(data))
+
+#-----------------------------------------------------------------
+
+# Replace missing values for specific columns
+data = replace(data, data == "", NA)
+
+data$date[is.na(data$date)] <- "Unknown"
+data$notify[is.na(data$notify)] <- "Unknown"
+data$url[is.na(data$url)] <- "Unknown"
+data$ip[is.na(data$ip)] <- "Unknown"
+data$country[is.na(data$country)] <- "Unknown"
+data$os[is.na(data$os)] <- "Unknown"
+data$webserver[is.na(data$webserver)] <- "Unknown"
+
+data$encoding[is.na(data$encoding)] <- "NULL"
+data$lang[is.na(data$lang)] <- "NULL"
+
+data$ransom[is.na(data$ransom)] <- NA
+data$downtime[is.na(data$downtime)] <- NA
+data$loss[is.na(data$loss)] <- NA
+
+data$os[data$os == "Unkno"] <- "Unknown"
+data$country[data$country == "UNKNOWN"] <- "Unknown"
+
+#-----------------------------------------------------------------
 
 # Display summary of the original data
 cat("Summary of the original data:\n")
@@ -97,3 +123,5 @@ print(unique(data$OS_Cleaned))
 os_summary <- table(data$OS_Cleaned)
 cat("\nSummary of OS categories:\n")
 print(os_summary)
+
+#-----------------------------------------------------------------
