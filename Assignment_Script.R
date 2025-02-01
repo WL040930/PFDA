@@ -11,6 +11,7 @@ if (!requireNamespace("DBI", quietly = TRUE)) install.packages("DBI")
 if (!requireNamespace("RSQLite", quietly = TRUE)) install.packages("RSQLite")
 if (!requireNamespace("lubridate", quietly = TRUE)) install.packages("lubridate")
 if (!requireNamespace("reshape2", quietly = TRUE)) install.packages("reshape2")
+if (!requireNamespace("mice", quietly = TRUE)) install.packages("mice")
 
 library(readxl)
 library(dplyr)
@@ -19,6 +20,7 @@ library(DBI)
 library(RSQLite)
 library(lubridate)
 library(reshape2)
+library(mice)
 
 # Declare file path for the dataset
 
@@ -55,19 +57,27 @@ data$country[data$country == "UNKNOWN"] <- "Unknown"
 data <- data[!duplicated(data), ]
 
 # Categorize OS field into broader categories and replace in the original data
+
 data$os_category <- case_when(
   grepl("Windows|Win|Microsoft", data$os, ignore.case = TRUE) & !grepl("Phone|Mobile", data$os, ignore.case = TRUE) ~ "Windows", 
   grepl("Linux|Ubuntu|Debian|Red Hat|CentOS|Fedora|Mint", data$os, ignore.case = TRUE) ~ "Linux",  
   grepl("BSD|FreeBSD|OpenBSD|NetBSD|Tru64|AIX|Solaris|HP-UX|IRIX|Unix", data$os, ignore.case = TRUE) ~ "Unix",  
   grepl("MacOS|OS X", data$os, ignore.case = TRUE) ~ "MacOS",  
-  grepl("Android|iOS|Windows Phone|iPXE|F5|Cisco|Juniper|Netgear|HP", data$os, ignore.case = TRUE) ~ "Embedded",  
+  grepl("Android|iOS|Windows Phone|iPXE|F5|Cisco|Juniper|Netgear|HP", data$os, ignore.case = TRUE) ~ "Embedded", 
+  grepl("Unknown|unknown", data$os, ignore.case = TRUE) ~ "Unknown",  # Group 'Unknown' entries
   TRUE ~ "Others"
 )
+
+# Check how many data is unknown
+sum(data$os_category == "Unknown") / nrow(data)
+
+# since only 0.046 of data is unknown, it is fine to drop it 
+data <- data[!(data$os_category == "Unknown"), ]
 
 # Convert incomplete year-only entries (e.g., 2015) to full date (e.g., 2015-01-01)
 data$date <- ifelse(grepl("^\\d{4}$", data$date), paste0(data$date, "-01-01"), data$date)
 
- data$date <- parse_date_time(data$date, orders = c("dmy", "mdy", "ymd", "b d Y"))
+data$date <- parse_date_time(data$date, orders = c("dmy", "mdy", "ymd", "b d Y"))
 
 # Handle invalid dates by setting them to 'Unknown'
 invalid_dates <- is.na(data$date)
@@ -80,39 +90,85 @@ if (any(invalid_dates)) {
   data$date <- as.character(data$date)
 }
 
-# categorize the date into time periods
-data$time_period <- case_when(
-  grepl("Unknown", data$date) ~ "Unknown",  # For 'Unknown' dates
-  as.numeric(format(as.Date(data$date), "%Y")) >= 1900 & as.numeric(format(as.Date(data$date), "%Y")) <= 1999 ~ "1900 - 1999",
-  as.numeric(format(as.Date(data$date), "%Y")) >= 2000 & as.numeric(format(as.Date(data$date), "%Y")) <= 2009 ~ "2000 - 2009", 
-  as.numeric(format(as.Date(data$date), "%Y")) >= 2010 & as.numeric(format(as.Date(data$date), "%Y")) <= 2019 ~ "2010 - 2019", 
-  as.numeric(format(as.Date(data$date), "%Y")) >= 2020 ~ "2020 - Present", 
-  TRUE ~ "Unknown"  
-)
+data$year <- as.numeric(format(as.Date(data$date), "%Y"))
+
+# ensure downtime is numeric 
+data$downtime <- as.numeric(data$downtime)
 
 View(data)
 
 
 # Lim Wei Lun
-# RQ 1 - 1.	Which operating system categories experience the most significant downtime fluctuations across different time periods?
 aggregated_data <- data %>%
-  group_by(time_period, os_category) %>%
+  group_by(year, os_category) %>%
   summarise(avg_downtime = mean(downtime, na.rm = TRUE))
 
-# Clustered bar chart of average system downtime by time period and OS category
-ggplot(aggregated_data, aes(x = time_period, y = avg_downtime, fill = os_category)) +
-  geom_bar(stat = "identity", position = "dodge") +  # Position the bars next to each other
-  labs(title = "Average System Downtime by Time Period and OS Category",
-       x = "Time Period",
+# RQ 1 - Which year has the highest system downtime across different operating system categories?
+
+# Calculate the total downtime for each year
+sum_data <- aggregated_data %>%
+  group_by(year) %>%
+  summarise(total_downtime = sum(avg_downtime))
+
+# Find the year with the highest total downtime
+max_downtime_year <- sum_data %>%
+  filter(total_downtime == max(total_downtime))
+
+# Create the bar chart with the year with the highest downtime highlighted
+ggplot(sum_data, aes(x = year, y = total_downtime)) +
+  geom_bar(stat = "identity", fill = "skyblue") +  # Bar chart for total downtime by year
+  geom_bar(data = max_downtime_year, aes(x = year, y = total_downtime), 
+           fill = "red", stat = "identity") +  # Highlight the year with highest downtime
+  labs(title = "Total System Downtime by Year",
+       x = "Year",
+       y = "Total Downtime") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better visibility
+
+
+# RQ 2 - What is the relationship between downtime and time periods across different OS categories?
+
+ggplot(aggregated_data, aes(x = year, y = avg_downtime, color = os_category)) +
+  geom_line() +  # Line plot for each OS category over time
+  geom_point() +  # Points to highlight each data point
+  labs(title = "System Downtime Trends by Year and OS Category",
+       x = "Year",
+       y = "Average Downtime",
+       color = "Operating System Category") +
+  theme_minimal() +
+  scale_color_manual(values = c("Windows" = "red", "Linux" = "blue", "Unix" = "green", 
+                                "MacOS" = "purple", "Embedded" = "orange", "Others" = "gray")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Extra Feature
+ggplot(aggregated_data, aes(x = year, y = avg_downtime, color = os_category)) +
+  geom_line() +  # Line graph showing trends
+  facet_wrap(~ os_category) +  # Facet by OS category
+  labs(title = "Downtime Trends by OS Category Across Time Periods",
+       x = "Year",
+       y = "Average Downtime",
+       color = "OS Category") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# RQ 3 -	Which operating system categories experience the most significant downtime fluctuations across different year?
+
+ggplot(aggregated_data, aes(x = year, y = avg_downtime, fill = os_category)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +  # Adjusted bar width for thinner bars
+  labs(title = "Average System Downtime by Year and OS Category",
+       x = "Year",
        y = "Average Downtime (in hours)",
        fill = "Operating System Category") +
   theme_minimal() +
-  scale_fill_manual(values = c("Windows" = "red", "Linux" = "blue", "Unix" = "green", "MacOS" = "purple", "Embedded" = "orange", "Others" = "grey"))  # Customize colors for OS categories
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),  # Rotate and adjust x-axis label position
+        axis.text = element_text(size = 10),  # Adjust the size of the x-axis labels
+        axis.title = element_text(size = 12)) +  # Adjust axis title size
+  scale_x_continuous(breaks = seq(min(aggregated_data$year), max(aggregated_data$year), by = 1))  # Show every year on x-axis
 
 # Extra Feature 
 # Create the heatmap with a red color gradient
 
-ggplot(aggregated_data, aes(x = time_period, y = os_category, fill = avg_downtime)) +
+ggplot(aggregated_data, aes(x = year, y = os_category, fill = avg_downtime)) +
   geom_tile() +
   labs(title = "Heatmap of Average System Downtime by Time Period and OS Category",
        x = "Time Period",
@@ -120,60 +176,3 @@ ggplot(aggregated_data, aes(x = time_period, y = os_category, fill = avg_downtim
        fill = "Average Downtime") +
   theme_minimal() +
   scale_fill_gradientn(colors = c("white", "lightcoral", "red", "darkred"))
-
-
-
-
-
-
-
-
-
-
-
-# Box plot: Time periods associated with the highest system downtime across different OS categories
-ggplot(data, aes(x = time_period, y = downtime, fill = os_category)) +
-  geom_boxplot() +
-  labs(title = "System Downtime Across Time Periods by Operating System Category",
-       x = "Time Period",
-       y = "System Downtime (in hours)") +
-  theme_minimal() +
-  theme(legend.position = "bottom")
-
-# Facet grid: System downtime by operating system and time period
-ggplot(data, aes(x = time_period, y = downtime, fill = os_category)) +
-  geom_boxplot() +
-  facet_wrap(~ os_category, scales = "free_y") +
-  labs(title = "System Downtime by Operating System Across Time Periods",
-       x = "Time Period",
-       y = "System Downtime (in hours)") +
-  theme_minimal() +
-  theme(legend.position = "bottom")
-
-# Line plot: Time-based factors influencing downtime patterns across OS categories
-ggplot(data, aes(x = as.factor(time_period), y = downtime, group = os_category, color = os_category)) +
-  geom_line() +
-  geom_point() +
-  labs(title = "System Downtime Trends by Time Period and Operating System",
-       x = "Time Period",
-       y = "System Downtime (in hours)") +
-  theme_minimal() +
-  theme(legend.position = "bottom")
-
-# Violin plot: System downtime by time period
-ggplot(data, aes(x = time_period, y = downtime, fill = time_period)) +
-  geom_violin(trim = FALSE) +
-  labs(title = "Distribution of System Downtime Across Time Periods",
-       x = "Time Period",
-       y = "System Downtime (in hours)") +
-  theme_minimal() +
-  theme(legend.position = "none")
-
-# Violin plot: System downtime by operating system category
-ggplot(data, aes(x = os_category, y = downtime, fill = os_category)) +
-  geom_violin(trim = FALSE) +
-  labs(title = "Distribution of System Downtime by Operating System Category",
-       x = "Operating System Category",
-       y = "System Downtime (in hours)") +
-  theme_minimal() +
-  theme(legend.position = "none")
