@@ -99,48 +99,28 @@ View(data)
 
 
 # Lim Wei Lun
+# RQ 1 - Which year has the highest system downtime across different operating system categories?
+
+# Calculate the total downtime for each year
+sum_data <- data %>%
+  group_by(year, os_category) %>%
+  summarise(total_downtime = sum(downtime, na.rm = TRUE), .groups = 'drop')
+
+ggplot(sum_data, aes(x = factor(year), y = total_downtime, fill = os_category)) +
+  geom_bar(stat = "identity", position = "stack") +  # Create stacked bars
+  labs(title = "Total System Downtime by Year and OS Category",
+       x = "Year",
+       y = "Total Downtime",
+       fill = "OS Category") +
+  scale_y_continuous(labels = number_format(accuracy = 1)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# RQ 2 - What is the relationship between downtime and time periods across different OS categories?
 aggregated_data <- data %>%
   group_by(year, os_category) %>%
   summarise(avg_downtime = mean(downtime, na.rm = TRUE))
 
-# RQ 1 - Which year has the highest system downtime across different operating system categories?
-
-# Calculate the total downtime for each year
-sum_data <- aggregated_data %>%
-  group_by(year) %>%
-  summarise(total_downtime = sum(avg_downtime))
-
-# Find the year with the highest total downtime
-max_downtime_year <- sum_data %>%
-  filter(total_downtime == max(total_downtime))
-
-# Create the bar chart with the year with the highest downtime highlighted
-ggplot(sum_data, aes(x = year, y = total_downtime)) +
-  geom_bar(stat = "identity", fill = "skyblue") +  # Bar chart for total downtime by year
-  geom_bar(data = max_downtime_year, aes(x = year, y = total_downtime), 
-           fill = "red", stat = "identity") +  # Highlight the year with highest downtime
-  labs(title = "Total System Downtime by Year",
-       x = "Year",
-       y = "Total Downtime") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better visibility
-
-
-# RQ 2 - What is the relationship between downtime and time periods across different OS categories?
-
-ggplot(aggregated_data, aes(x = year, y = avg_downtime, color = os_category)) +
-  geom_line() +  # Line plot for each OS category over time
-  geom_point() +  # Points to highlight each data point
-  labs(title = "System Downtime Trends by Year and OS Category",
-       x = "Year",
-       y = "Average Downtime",
-       color = "Operating System Category") +
-  theme_minimal() +
-  scale_color_manual(values = c("Windows" = "red", "Linux" = "blue", "Unix" = "green", 
-                                "MacOS" = "purple", "Embedded" = "orange", "Others" = "gray")) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-# Extra Feature
 ggplot(aggregated_data, aes(x = year, y = avg_downtime, color = os_category)) +
   geom_line() +  # Line graph showing trends
   facet_wrap(~ os_category) +  # Facet by OS category
@@ -152,18 +132,22 @@ ggplot(aggregated_data, aes(x = year, y = avg_downtime, color = os_category)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # RQ 3 -	Which operating system categories experience the most significant downtime fluctuations across different year?
+# Calculate overall average downtime for each OS category across all years
+overall_avg <- data %>%
+  group_by(os_category) %>%
+  summarise(overall_avg_downtime = mean(downtime, na.rm = TRUE))
 
-ggplot(aggregated_data, aes(x = year, y = avg_downtime, fill = os_category)) +
-  geom_bar(stat = "identity", position = "dodge", width = 0.7) +  # Adjusted bar width for thinner bars
-  labs(title = "Average System Downtime by Year and OS Category",
-       x = "Year",
+ggplot(overall_avg, aes(x = os_category, y = overall_avg_downtime, fill = os_category)) +
+  geom_bar(stat = "identity", width = 0.7) +  # Adjusted bar width for thinner bars
+  labs(title = "Overall Average System Downtime by OS Category",
+       x = "Operating System Category",
        y = "Average Downtime (in hours)",
-       fill = "Operating System Category") +
+       fill = "OS Category") +
+  scale_y_continuous(labels = number_format(accuracy = 0.1)) +  # Format y-axis labels to one decimal place
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),  # Rotate and adjust x-axis label position
-        axis.text = element_text(size = 10),  # Adjust the size of the x-axis labels
-        axis.title = element_text(size = 12)) +  # Adjust axis title size
-  scale_x_continuous(breaks = seq(min(aggregated_data$year), max(aggregated_data$year), by = 1))  # Show every year on x-axis
+        axis.text = element_text(size = 10),  # Adjust the size of the axis labels
+        axis.title = element_text(size = 12))    # Adjust axis title size
 
 # Extra Feature 
 # Create the heatmap with a red color gradient
@@ -176,3 +160,34 @@ ggplot(aggregated_data, aes(x = year, y = os_category, fill = avg_downtime)) +
        fill = "Average Downtime") +
   theme_minimal() +
   scale_fill_gradientn(colors = c("white", "lightcoral", "red", "darkred"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#######################################
+# TEMP DISPOSE 
+ggplot(aggregated_data, aes(x = year, y = avg_downtime, color = os_category)) +
+  geom_line() +  # Line plot for each OS category over time
+  geom_point() +  # Points to highlight each data point
+  labs(title = "System Downtime Trends by Year and OS Category",
+       x = "Year",
+       y = "Average Downtime",
+       color = "Operating System Category") +
+  theme_minimal() +
+  scale_color_manual(values = c("Windows" = "red", "Linux" = "blue", "Unix" = "green", 
+                                "MacOS" = "purple", "Embedded" = "orange", "Others" = "gray")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
