@@ -23,6 +23,7 @@ library(reshape2)
 library(mice)
 library(scales)
 
+##############################################################################
 # Declare file path for the dataset
 
 FILE_PATH <- "C:\\Users\\user\\New folder (2)\\OneDrive - Asia Pacific University\\APU Degree\\YEAR2 SEM1\\PFDA\\PFDA Assigment\\4.hackingdata.csv"
@@ -58,8 +59,8 @@ data$encoding[data$encoding == "N"] <- "NULL"
 # Check for duplicate rows and remove them
 data <- data[!duplicated(data), ]
 
+# DATA CLEANING - COUNTRY
 # Categorize OS field into broader categories and replace in the original data
-
 data$os_category <- case_when(
   grepl("Windows|Win|Microsoft", data$os, ignore.case = TRUE) & !grepl("Phone|Mobile", data$os, ignore.case = TRUE) ~ "Windows", 
   grepl("Linux|Ubuntu|Debian|Red Hat|CentOS|Fedora|Mint", data$os, ignore.case = TRUE) ~ "Linux",  
@@ -70,6 +71,58 @@ data$os_category <- case_when(
   TRUE ~ "Others"
 )
 
+# Convert country names to lowercase
+data$country <- tolower(data$country)
+
+# DATA CLEANING - COUNTRY
+# Initialize the 'state' column
+data$state <- NA
+
+# Define the countries for each state
+north_america <- c("united states", "canada", "mexico", "costarica", "panama", "guatemala", "belize", 
+                   "jamaica", "dominican republic", "cuba", "haiti")
+south_america <- c("argentina", "brazil", "colombia", "peru", "venezuela", "chile", "ecuador", "bolivia", 
+                   "paraguay", "suriname", "guyana")
+europe <- c("united kingdom", "germany", "france", "italy", "spain", "sweden", "netherlands", "belgium", 
+            "denmark", "romania", "poland", "norway", "portugal", "greece", "switzerland", "austria", 
+            "finland", "ireland", "czech republic", "hungary", "bulgaria", "slovenia", "slovakia", 
+            "moldova", "lithuania", "latvia", "estonia", "liechtenstein", "monaco", "san marino", "andorra", 
+            "albania", "kosovo", "malta", "armenia", "georgia")
+asia <- c("india", "china", "japan", "south korea", "taiwan", "hong kong", "thailand", "malaysia", 
+          "singapore", "indonesia", "philippines", "pakistan", "bangladesh", "nepal", "afghanistan", 
+          "israel", "lebanon", "sri lanka", "myanmar", "vietnam", "mongolia", "bangkok", "brunei darussalam", 
+          "maldives")
+africa <- c("south africa", "egypt", "algeria", "kenya", "nigeria", "tunisia", "ghana", "ethiopia", 
+            "uganda", "tanzania", "zambia", "namibia", "gabon", "liberia", "congo", "mozambique", "senegal", 
+            "mauritius", "zimbabwe", "botswana", "mali", "cameroon", "sierra leone", "burundi", "burkina faso", 
+            "mauritania", "gambia", "reunion", "seychelles")
+middle_east <- c("saudi arabia", "united arab emirates", "oman", "qatar", "bahrain", "kuwait", "syrian arab republic", 
+                 "iraq", "yemen")
+oceania <- c("australia", "new zealand", "papua new guinea", "fiji", "samoa", "vanuatu", "tonga", "solomon islands", 
+             "micronesia", "marshall islands", "palau", "nauru")
+
+# Apply categorization
+data$state[data$country %in% north_america] <- "North America"
+data$state[data$country %in% south_america] <- "South America"
+data$state[data$country %in% europe] <- "Europe"
+data$state[data$country %in% asia] <- "Asia"
+data$state[data$country %in% africa] <- "Africa"
+data$state[data$country %in% middle_east] <- "Middle East"
+data$state[data$country %in% oceania] <- "Oceania"
+
+# Handle ambiguous or special cases
+data$state[data$country %in% c("europe", "asia/pacific region", "unknown", "anonymous proxy", 
+                               "satellite provider", "palastinian territory", "americansamoa", 
+                               "virginislands(british)", "virginislands(u.s.)")] <- NA
+
+# Clean up trailing spaces
+data$state <- trimws(data$state)
+
+# Count non-NA values in the 'state' column
+sum(!is.na(data$state))
+
+
+# DATA CLEANING - DATE
 # Convert incomplete year-only entries (e.g., 2015) to full date (e.g., 2015-01-01)
 data$date <- ifelse(grepl("^\\d{4}$", data$date), paste0(data$date, "-01-01"), data$date)
 
@@ -93,7 +146,7 @@ data$downtime <- as.numeric(data$downtime)
 
 View(data)
 
-
+##############################################################################
 # Lim Wei Lun
 
 # Check how many data is unknown
@@ -121,20 +174,29 @@ ggplot(sum_data, aes(x = factor(year), y = total_downtime, fill = os_category)) 
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # RQ 2 - What is the relationship between downtime and time periods across different OS categories?
-aggregated_data <- data %>%
+
+# Calculate average downtime by year and OS category
+avg_data <- data %>%
   filter(os_category != "Unknown") %>%
   group_by(year, os_category) %>%
-  summarise(avg_downtime = mean(downtime, na.rm = TRUE))
+  summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = 'drop')
 
-ggplot(aggregated_data, aes(x = year, y = avg_downtime, color = os_category)) +
-  geom_line() +  # Line graph showing trends
-  facet_wrap(~ os_category) +  # Facet by OS category
-  labs(title = "Downtime Trends by OS Category Across Years",
+# Calculate the correlation between year and average downtime for each OS category
+correlation_by_os <- avg_data %>%
+  group_by(os_category) %>%
+  summarise(correlation = cor(year, avg_downtime, use = "complete.obs"))
+
+# Create scatter plot with linear regression line
+ggplot(avg_data, aes(x = year, y = avg_downtime, color = os_category)) +
+  geom_point(alpha = 0.7, size = 3) +  # Scatter plot points
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed") +
+  facet_wrap(~ os_category, scales = "free") +  # Facet by OS category
+  labs(title = "Average System Downtime by Year and OS Category",
        x = "Year",
-       y = "Average Downtime",
-       color = "OS Category") +
+       y = "Average Downtime (hours)",
+       color = "Operating System Category") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(legend.position = "bottom")
 
 # RQ 3 -	Which operating system categories experience the most significant downtime fluctuations across different year?
 # Calculate average downtime per year for each OS category
@@ -175,17 +237,29 @@ ggplot(aggregated_data, aes(x = year, y = os_category, fill = avg_downtime)) +
   theme_minimal() +
   scale_fill_gradientn(colors = c("white", "lightcoral", "red", "darkred"))
 
+# RQ 4
+variance_data <- data %>%
+  filter(os_category != "Unknown") %>%
+  group_by(os_category) %>%
+  summarise(avg_downtime = mean(downtime, na.rm = TRUE),
+            sd_downtime = sd(downtime, na.rm = TRUE), .groups = 'drop') %>%
+  arrange(avg_downtime)  # Arrange by average downtime in ascending order
+
+ggplot(variance_data, aes(x = reorder(os_category, avg_downtime), y = avg_downtime, fill = os_category)) +
+  geom_bar(stat = "identity", width = 0.6) +  # Bar chart for average downtime
+  geom_errorbar(aes(ymin = avg_downtime - sd_downtime, ymax = avg_downtime + sd_downtime), 
+                width = 0.2, color = "black") +  # Error bars for variance (standard deviation)
+  labs(title = "Average Downtime with Variance by OS Category",
+       x = "Operating System Category",
+       y = "Average Downtime (hours)",
+       fill = "OS Category") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+##############################################################################
+
 
 
 write.csv(data, "output.csv", row.names = FALSE)
-
-
-
-
-
-
-
-
 
 
 
@@ -221,3 +295,4 @@ ggplot(overall_avg, aes(x = os_category, y = overall_avg_downtime, fill = os_cat
   geom_text(aes(label = round(overall_avg_downtime, 1)),  # Display the value with 1 decimal place
             vjust = -0.5,  # Adjust the position of the label above the bar
             size = 4)  # Adjust label size
+
