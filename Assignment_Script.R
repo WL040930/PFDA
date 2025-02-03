@@ -52,6 +52,7 @@ data$loss[is.na(data$loss)] <- NA
 # Standardize incorrect entries
 data$os[data$os == "Unkno"] <- "Unknown"
 data$country[data$country == "UNKNOWN"] <- "Unknown"
+data$encoding[data$encoding == "N"] <- "NULL"
 
 # Check for duplicate rows and remove them
 data <- data[!duplicated(data), ]
