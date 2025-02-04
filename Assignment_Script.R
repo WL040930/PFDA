@@ -12,6 +12,7 @@ if (!requireNamespace("RSQLite", quietly = TRUE)) install.packages("RSQLite")
 if (!requireNamespace("lubridate", quietly = TRUE)) install.packages("lubridate")
 if (!requireNamespace("reshape2", quietly = TRUE)) install.packages("reshape2")
 if (!requireNamespace("mice", quietly = TRUE)) install.packages("mice")
+if (!requireNamespace("tidyr", quietly = TRUE)) install.packages("tidyr")
 
 library(readxl)
 library(dplyr)
@@ -22,6 +23,7 @@ library(lubridate)
 library(reshape2)
 library(mice)
 library(scales)
+library(tidyr)
 
 ##############################################################################
 # Declare file path for the dataset
@@ -75,10 +77,10 @@ data$os_category <- case_when(
 data$country <- tolower(data$country)
 
 # DATA CLEANING - COUNTRY
-# Initialize the 'state' column
-data$state <- NA
+# Initialize the 'continent ' column
+data$continent  <- NA
 
-# Define the countries for each state
+# Define the countries for each continent 
 north_america <- c("united states", "canada", "mexico", "costarica", "panama", "guatemala", "belize", 
                    "jamaica", "dominican republic", "cuba", "haiti")
 south_america <- c("argentina", "brazil", "colombia", "peru", "venezuela", "chile", "ecuador", "bolivia", 
@@ -102,24 +104,24 @@ oceania <- c("australia", "new zealand", "papua new guinea", "fiji", "samoa", "v
              "micronesia", "marshall islands", "palau", "nauru")
 
 # Apply categorization
-data$state[data$country %in% north_america] <- "North America"
-data$state[data$country %in% south_america] <- "South America"
-data$state[data$country %in% europe] <- "Europe"
-data$state[data$country %in% asia] <- "Asia"
-data$state[data$country %in% africa] <- "Africa"
-data$state[data$country %in% middle_east] <- "Middle East"
-data$state[data$country %in% oceania] <- "Oceania"
+data$continent [data$country %in% north_america] <- "North America"
+data$continent [data$country %in% south_america] <- "South America"
+data$continent [data$country %in% europe] <- "Europe"
+data$continent [data$country %in% asia] <- "Asia"
+data$continent [data$country %in% africa] <- "Africa"
+data$continent [data$country %in% middle_east] <- "Middle East"
+data$continent [data$country %in% oceania] <- "Oceania"
 
 # Handle ambiguous or special cases
-data$state[data$country %in% c("europe", "asia/pacific region", "unknown", "anonymous proxy", 
+data$continent [data$country %in% c("europe", "asia/pacific region", "unknown", "anonymous proxy", 
                                "satellite provider", "palastinian territory", "americansamoa", 
                                "virginislands(british)", "virginislands(u.s.)")] <- NA
 
 # Clean up trailing spaces
-data$state <- trimws(data$state)
+data$continent  <- trimws(data$continent )
 
-# Count non-NA values in the 'state' column
-sum(!is.na(data$state))
+# Count non-NA values in the 'continent ' column
+sum(!is.na(data$continent ))
 
 
 # DATA CLEANING - DATE
@@ -288,17 +290,110 @@ ggplot(variance_data, aes(x = reorder(os_category, avg_downtime), y = avg_downti
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ##############################################################################
+# Goh Xin Tong 
+# RQ 1
+# Calculate variance of downtime for each continent 
+state_variance <- data %>%
+  filter(!is.na(continent )) %>%
+  group_by(continent ) %>%
+  summarise(downtime_variance = var(downtime, na.rm = TRUE), .groups = 'drop')
+
+# Sort by variance (lowest first, most consistent continent  first)
+state_variance <- state_variance %>%
+  arrange(downtime_variance)
+
+# Visualize which continent  has the most consistent downtime using variance
+ggplot(state_variance, aes(x = reorder(continent , downtime_variance), y = downtime_variance, fill = continent )) +
+  geom_bar(stat = "identity") +
+  labs(title = "Downtime Consistency by Region (Variance)", x = "continent ", y = "Variance of Downtime") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# RQ 2
+# Group data by 'year' and 'continent ' and calculate the total downtime for each year and continent 
+total_downtime_per_year_state <- data %>%
+  filter(!is.na(continent )) %>%
+  group_by(year, continent ) %>%
+  summarise(total_downtime = sum(downtime, na.rm = TRUE)) %>%
+  arrange(year, continent )
 
 
+# Create a heatmap to visualize the total downtime per state over the years
+ggplot(total_downtime_per_year_state, aes(x = year, y = continent , fill = total_downtime)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "red") +  # Set color gradient for heatmap
+  labs(
+    title = "Total Downtime per State Over the Years",
+    x = "Year",
+    y = "State",
+    fill = "Total Downtime"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 
+# Aggregate total downtime by state
+state_downtime <- data %>%
+  filter(!is.na(continent) & !is.na(downtime)) %>%
+  group_by(continent) %>%
+  summarise(total_downtime = sum(downtime, na.rm = TRUE), .groups = 'drop') %>%
+  arrange(desc(total_downtime))
+
+# Plot the top 10 states with highest downtime
+ggplot(state_downtime, aes(x = reorder(continent, total_downtime), y = total_downtime, fill = total_downtime)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  coord_flip() +  # Flip for better readability
+  scale_fill_gradient(low = "blue", high = "red") +  # Color gradient
+  labs(title = "Total System Downtime by State",
+       x = "State",
+       y = "Total Downtime (hours)",
+       fill = "Total Downtime") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# RQ 4
+# Summarize the data: calculate average downtime by continent and year
+avg_downtime_trends <- data %>%
+  filter(!is.na(continent )) %>%
+  group_by(continent, year) %>%
+  summarise(avg_downtime = mean(downtime, na.rm = TRUE)) %>%
+  arrange(continent, year)
+
+# Visualization of the trends using faceting
+ggplot(avg_downtime_trends, aes(x = year, y = avg_downtime)) +
+  geom_line(aes(color = continent)) +
+  geom_point(aes(color = continent)) +
+  facet_wrap(~ continent, scales = "free_y") +  # Facet by continent
+  labs(title = "Trends in Average Downtime by Continent and Year",
+       x = "Year",
+       y = "Average Downtime (hours)") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Hide legend since it's already facet-based
+
+downtime_by_continent_year <- data %>%
+  filter(!is.na(continent )) %>%
+  group_by(continent, year) %>%
+  summarise(average_downtime = mean(downtime, na.rm = TRUE))
+
+# Calculate the change in downtime from the first to the last year for each continent
+downtime_change <- downtime_by_continent_year %>%
+  group_by(continent) %>%
+  summarise(first_year_downtime = first(average_downtime),
+            last_year_downtime = last(average_downtime),
+            change_in_downtime = last_year_downtime - first_year_downtime)
+
+# Bar Chart for Change in Downtime (First to Last Year)
+ggplot(downtime_change, aes(x = reorder(continent, change_in_downtime), y = change_in_downtime, fill = continent)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Change in Downtime by Continent (First to Last Year)",
+       x = "Continent", y = "Change in Downtime") +
+  coord_flip() +  # Flip to make it horizontal
+  theme_minimal() +
+  theme(legend.position = "none")
+
+##############################################################################
 
 
 write.csv(data, "output.csv", row.names = FALSE)
-
-
-
-
-
 
 
 #######################################
