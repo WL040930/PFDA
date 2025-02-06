@@ -177,6 +177,7 @@ sum(is.na(data$os)) / nrow(data)
 #' 
 categorize_os <- function(data) {
   data$os_category <- case_when(
+    is.na(data$os) ~ NA_character_,  
     grepl("Windows|Win|Microsoft", data$os, ignore.case = TRUE) & !grepl("Phone|Mobile", data$os, ignore.case = TRUE) ~ "Windows", 
     grepl("Linux|Ubuntu|Debian|Red Hat|CentOS|Fedora|Mint", data$os, ignore.case = TRUE) ~ "Linux",  
     grepl("BSD|FreeBSD|OpenBSD|NetBSD|Tru64|AIX|Solaris|HP-UX|IRIX|Unix", data$os, ignore.case = TRUE) ~ "Unix",  
@@ -187,6 +188,7 @@ categorize_os <- function(data) {
   )
   return(data)
 }
+
 data <- categorize_os(data) 
 
 # Check the cleaned data
@@ -287,12 +289,8 @@ table(data$country_cleaned)
 data$os_category <- as.factor(data$os_category)
 data$country_cleaned <- as.factor(data$country_cleaned)
 
-# Handle missing os_category using the most frequent value
-most_frequent_os <- names(sort(table(data$os_category), decreasing = TRUE))[1]
-data$os_category[is.na(data$os_category)] <- most_frequent_os
-
 # Split dataset into known and unknown country_cleaned
-train_data <- data %>% filter(!is.na(country_cleaned))
+train_data <- data %>% filter(!is.na(country_cleaned) & !is.na(os_category))  # Filter out rows with NA os_category
 test_data <- data %>% filter(is.na(country_cleaned))
 
 # Train a random forest model
@@ -325,10 +323,32 @@ print(continent_summary)
 ### Data Validation ###
 #####################################################################################################
 
+################
+### Downtime ###
+################
+
 # ensure downtime is numeric 
 data$downtime <- as.numeric(data$downtime)
 
+# remove all the outlier in downtime
+# Calculate the IQR for downtime
+Q1 <- quantile(data$downtime, 0.25, na.rm = TRUE)  # First quartile
+Q3 <- quantile(data$downtime, 0.75, na.rm = TRUE)  # Third quartile
+IQR_value <- Q3 - Q1  # IQR
 
+# Define the lower and upper bounds for outliers
+lower_bound <- Q1 - 1.5 * IQR_value
+upper_bound <- Q3 + 1.5 * IQR_value
+
+# Filter data to remove outliers in the downtime column
+data_no_outliers <- data %>%
+  filter(downtime >= lower_bound & downtime <= upper_bound)
+
+# View the cleaned data without outliers
+print(data_no_outliers)
+
+cat("Number of rows removed: ", nrow(data) - nrow(data_no_outliers))
+# No outlier in downtime, so nothing need to be removed. 
 
 
 
@@ -374,7 +394,9 @@ ggplot(sum_data, aes(x = factor(year), y = total_downtime, fill = os_category)) 
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# RQ 2 - What is the relationship between downtime and time periods across different OS categories?
+############
+### RQ 2 ###
+############
 
 # Calculate average downtime by year and OS category
 avg_data <- data %>%
@@ -399,8 +421,9 @@ ggplot(avg_data, aes(x = year, y = avg_downtime, color = os_category)) +
   theme_minimal() +
   theme(legend.position = "bottom")
 
-# RQ 3 -	Which operating system categories experience the most significant downtime fluctuations across different year?
-# Calculate average downtime per year for each OS category
+############
+### RQ 3 ###
+############
 avg_data <- data %>%
   filter(os_category != "Unknown") %>%
   group_by(year, os_category) %>%
@@ -437,8 +460,9 @@ ggplot(aggregated_data, aes(x = year, y = os_category, fill = avg_downtime)) +
   theme_minimal() +
   scale_fill_gradientn(colors = c("white", "lightcoral", "red", "darkred"))
 
-# RQ 4
-# Calculate the average downtime for each OS category by year
+############
+### RQ 4 ###
+############
 avg_downtime_per_os <- data %>%
   filter(os_category != "Unknown") %>%
   group_by(year, os_category) %>%
@@ -468,7 +492,10 @@ ggplot(downtime_change, aes(x = reorder(os_category, change_in_downtime), y = ch
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 
-# RQ 5
+############
+### RQ 5 ###
+############
+
 variance_data <- data %>%
   filter(os_category != "Unknown") %>%
   group_by(os_category) %>%
@@ -487,7 +514,13 @@ ggplot(variance_data, aes(x = reorder(os_category, avg_downtime), y = avg_downti
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-##############################################################################
+###############################################################################
+###############################################################################
+
+###############################
+### Goh Xin Tong - TP069712 ###
+###############################
+
 # Goh Xin Tong 
 # RQ 1
 # Calculate variance of downtime for each continent 
