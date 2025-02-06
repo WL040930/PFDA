@@ -177,19 +177,17 @@ sum(is.na(data$os)) / nrow(data)
 #' 
 categorize_os <- function(data) {
   data$os_category <- case_when(
-    is.na(data$os) ~ NA_character_,  
-    grepl("Windows|Win|Microsoft", data$os, ignore.case = TRUE) & !grepl("Phone|Mobile", data$os, ignore.case = TRUE) ~ "Windows", 
-    grepl("Linux|Ubuntu|Debian|Red Hat|CentOS|Fedora|Mint", data$os, ignore.case = TRUE) ~ "Linux",  
-    grepl("BSD|FreeBSD|OpenBSD|NetBSD|Tru64|AIX|Solaris|HP-UX|IRIX|Unix", data$os, ignore.case = TRUE) ~ "Unix",  
-    grepl("MacOS|OS X", data$os, ignore.case = TRUE) ~ "MacOS",  
-    grepl("Android|iOS|Windows Phone|iPXE|F5|Cisco|Juniper|Netgear|HP", data$os, ignore.case = TRUE) ~ "Embedded", 
-    grepl("Unknown|unknown", data$os, ignore.case = TRUE) ~ "Unknown",  # Group 'Unknown' entries
+    grepl("Windows|Win|Microsoft", data$os, ignore.case = TRUE) & !grepl("Phone|Mobile", data$os, ignore.case = TRUE) ~ "Windows",
+    grepl("Linux|Ubuntu|Debian|Red Hat|CentOS|Fedora|Mint", data$os, ignore.case = TRUE) ~ "Linux",
+    grepl("BSD|FreeBSD|OpenBSD|NetBSD|Tru64|AIX|Solaris|HP-UX|IRIX|Unix", data$os, ignore.case = TRUE) ~ "Unix",
+    grepl("MacOS|OS X", data$os, ignore.case = TRUE) ~ "MacOS",
+    grepl("Android|iOS|Windows Phone|iPXE|F5|Cisco|Juniper|Netgear|HP", data$os, ignore.case = TRUE) ~ "Embedded",
     TRUE ~ "Others"
   )
   return(data)
 }
 
-data <- categorize_os(data) 
+data <- categorize_os(data)
 
 # Check the cleaned data
 table(data$os_category)
@@ -371,39 +369,36 @@ cat("Number of rows removed: ", nrow(data) - nrow(data_no_outliers))
 ############
 ### RQ 1 ###
 ############
-# RQ 1 - Which year has the highest system downtime across different operating system categories?
+#' LIM WEI LUN - TP069058
+#' RQ 2
+#' Which OS category contributes the most to the frequency of downtime?
 
-os_count_by_year <- data %>%
-  group_by(year, os_category) %>%
-  summarize(count = n(), .groups = "drop")
+# Step 1: Count the frequency of each OS category
+os_frequency <- data %>%
+  group_by(os_category) %>%
+  summarise(frequency = n())
 
-
-# Calculate the total downtime for each year
-sum_data <- data %>%
-  filter(os_category != "Unknown") %>%
-  group_by(year, os_category) %>%
-  summarise(total_downtime = sum(downtime, na.rm = TRUE), .groups = 'drop')
-
-ggplot(sum_data, aes(x = factor(year), y = total_downtime, fill = os_category)) +
-  geom_bar(stat = "identity", position = "stack") +  # Create stacked bars
-  labs(title = "Total System Downtime by Year and OS Category",
-       x = "Year",
-       y = "Total Downtime",
-       fill = "OS Category") +
-  scale_y_continuous(labels = number_format(accuracy = 1)) +
+# Step 2: Create a pie chart for OS frequency
+ggplot(os_frequency, aes(x = "", y = frequency, fill = os_category)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +  
+  labs(title = "Pie Chart of OS Categories Contributing to Downtime Frequency") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_blank())  # Hide axis labels
+
 
 ############
 ### RQ 2 ###
 ############
+#' LIM WEI LUN - TP069058
+#' RQ 2
+#' What is the trend in average system downtime by year for each operating system category?
 
 # Calculate average downtime by year and OS category
 avg_data <- data %>%
   filter(os_category != "Unknown") %>%
   group_by(year, os_category) %>%
   summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = 'drop')
-
 # Calculate the correlation between year and average downtime for each OS category
 correlation_by_os <- avg_data %>%
   group_by(os_category) %>%
@@ -424,95 +419,108 @@ ggplot(avg_data, aes(x = year, y = avg_downtime, color = os_category)) +
 ############
 ### RQ 3 ###
 ############
-avg_data <- data %>%
-  filter(os_category != "Unknown") %>%
+#' LIM WEI LUN - TP069058
+#' RQ 3
+#' Which operating system has the most years where it experienced the lowest average downtime?
+
+# Step 1: Group the data by year and os_category to calculate average downtime
+avg_downtime_per_os <- data %>%
+  filter(!is.na(data$os_category)) %>%
   group_by(year, os_category) %>%
   summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = 'drop')
 
-# Create the grouped bar chart
-# Custom colors using scale_fill_manual
-ggplot(avg_data, aes(x = factor(year), y = avg_downtime, fill = os_category)) +
-  geom_bar(stat = "identity", position = "dodge", width = 0.7) +  # Grouped bars
-  labs(title = "Average System Downtime by Year and OS Category",
-       x = "Year",
-       y = "Average Downtime (in hours)",
-       fill = "OS Category") +
-  scale_y_continuous(labels = scales::number_format(accuracy = 0.1)) +  # Format y-axis labels
-  scale_x_discrete(breaks = seq(min(avg_data$year), max(avg_data$year), by = 1)) +  # X-axis breaks for each year
-  scale_fill_manual(values = c("Embedded" = "#F39C12", "Linux" = "#27AE60", 
-                               "Windows" = "#2980B9", "MacOS" = "#8E44AD", 
-                               "Unix" = "#E74C3C", "Others" = "#F1C40F")) +  # Manually assign colors
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels
-        plot.title = element_text(hjust = 0.5),  # Center title
-        axis.text = element_text(size = 12),  # Adjust axis text size
-        axis.title = element_text(size = 14))  # Adjust axis title size
+# Step 2: Identify the OS with the highest downtime for each year
+highest_downtime_per_year <- avg_downtime_per_os %>%
+  group_by(year) %>%
+  filter(avg_downtime == max(avg_downtime)) %>%
+  ungroup()
 
-# Extra Feature 1
-# Create the heatmap with a red color gradient
+# Step 3: Count how many times each OS category had the highest downtime
+os_count <- highest_downtime_per_year %>%
+  group_by(os_category) %>%
+  summarise(count = n(), .groups = 'drop')
 
-ggplot(aggregated_data, aes(x = year, y = os_category, fill = avg_downtime)) +
-  geom_tile() +
-  labs(title = "Heatmap of Average System Downtime by Years and OS Category",
-       x = "Years",
-       y = "Operating System Category",
-       fill = "Average Downtime") +
+# Step 4: Generate the pie chart with count labels
+ggplot(os_count, aes(x = "", y = count, fill = os_category)) +
+  geom_bar(stat = "identity", width = 1) +  # Bar chart to mimic pie
+  coord_polar(theta = "y") +  # Convert to polar coordinates to make it a pie chart
+  labs(title = "Count of Highest Downtime OS Categories Across Years", fill = "OS Category") +
   theme_minimal() +
-  scale_fill_gradientn(colors = c("white", "lightcoral", "red", "darkred"))
+  theme(axis.text.x = element_blank(),  # Remove x-axis text
+        axis.title.x = element_blank(),  # Remove x-axis title
+        plot.title = element_text(hjust = 0.5)) +  # Center the title
+  geom_text(aes(label = paste(count)), position = position_stack(vjust = 0.5), color = "white")  # Display counts
+
 
 ############
 ### RQ 4 ###
 ############
-avg_downtime_per_os <- data %>%
+#' LIM WEI LUN - TP069058
+#' RQ 4
+#' Which operating system category showed the most improvement in downtime frequency over the years?
+
+# Step 1: Remove rows with missing or "Unknown" values
+clean_data <- data %>%
+  filter(!is.na(year), !is.na(os_category), !is.na(downtime), year != "Unknown", os_category != "Unknown", downtime != "Unknown")
+
+# Step 2: Calculate the average downtime for each operating system by year
+avg_downtime_by_os <- clean_data %>%
   filter(os_category != "Unknown") %>%
   group_by(year, os_category) %>%
   summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = 'drop')
 
-# Calculate the change in average downtime (difference between first and last year)
-downtime_change <- avg_downtime_per_os %>%
+# Step 3: Calculate the change in downtime from the first to the last year
+downtime_diff <- avg_downtime_by_os %>%
   group_by(os_category) %>%
   summarise(
-    first_year_downtime = avg_downtime[which.min(year)],  # Downtime in the first year
-    last_year_downtime = avg_downtime[which.max(year)],   # Downtime in the last year
-    change_in_downtime = last_year_downtime - first_year_downtime
+    first_year_downtime = avg_downtime[which.min(year)],  # Downtime in the earliest year
+    last_year_downtime = avg_downtime[which.max(year)],   # Downtime in the latest year
+    downtime_change = last_year_downtime - first_year_downtime
   )
 
-# Sort the data by change in downtime to highlight the most improvement
-downtime_change <- downtime_change %>%
-  arrange(desc(change_in_downtime))
+# Step 4: Sort the data by the magnitude of the downtime change, focusing on the most significant improvement
+downtime_diff_sorted <- downtime_diff %>%
+  arrange(desc(downtime_change))
 
-# Plot the change in downtime for each OS category
-ggplot(downtime_change, aes(x = reorder(os_category, change_in_downtime), y = change_in_downtime, fill = change_in_downtime > 0)) +
+# Step 5: Create a bar chart of downtime changes for each operating system
+ggplot(downtime_diff_sorted, aes(x = reorder(os_category, downtime_change), y = downtime_change, fill = downtime_change > 0)) +
   geom_bar(stat = "identity", width = 0.7) +  # Bar chart
   labs(title = "Change in Average System Downtime Across Years by OS Category",
        x = "Operating System Category",
        y = "Change in Average Downtime (hours)",
-       fill = "Improvement") +
-  scale_fill_manual(values = c("TRUE" = "#27AE60", "FALSE" = "#E74C3C")) +  # Green for improvement, red for decline
+       fill = "Legend") +  # Adjust legend title 
+  scale_fill_manual(values = c("FALSE" = "#27AE60", "TRUE" = "#E74C3C"), labels = c("TRUE" = "Setback", "FALSE" = "Improvement")) +  
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better visibility
 
 ############
 ### RQ 5 ###
 ############
+#' LIM WEI LUN - TP069058
+#' RQ 5
+#' Which OS category had the shortest recovery time
 
-variance_data <- data %>%
-  filter(os_category != "Unknown") %>%
+# Step 1: Count occurrences per OS category
+os_downtime_summary <- data %>%
   group_by(os_category) %>%
-  summarise(avg_downtime = mean(downtime, na.rm = TRUE),
-            sd_downtime = sd(downtime, na.rm = TRUE), .groups = 'drop') %>%
-  arrange(avg_downtime)  # Arrange by average downtime in ascending order
+  summarise(
+    total_downtime = sum(downtime, na.rm = TRUE), # Sum total downtime
+    occurrences = n(),  # Count occurrences
+    avg_downtime_per_occurrence = total_downtime / occurrences  # Calculate average downtime per incident
+  ) %>%
+  arrange(avg_downtime_per_occurrence)  # Sort by lowest downtime
 
-ggplot(variance_data, aes(x = reorder(os_category, avg_downtime), y = avg_downtime, fill = os_category)) +
-  geom_bar(stat = "identity", width = 0.6) +  # Bar chart for average downtime
-  geom_errorbar(aes(ymin = avg_downtime - sd_downtime, ymax = avg_downtime + sd_downtime), 
-                width = 0.2, color = "black") +  # Error bars for variance (standard deviation)
-  labs(title = "Average Downtime with Variance by OS Category",
-       x = "Operating System Category",
-       y = "Average Downtime (hours)",
-       fill = "OS Category") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Step 2: Visualize with a bar chart
+ggplot(os_downtime_summary, aes(x = reorder(os_category, avg_downtime_per_occurrence), 
+                                y = avg_downtime_per_occurrence, fill = os_category)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +  # Flip for readability
+  labs(title = "Average Downtime per Occurrence by OS Category",
+       x = "OS Category",
+       y = "Average Downtime (Days)") +
+  theme_minimal()
+
+
 
 ###############################################################################
 ###############################################################################
