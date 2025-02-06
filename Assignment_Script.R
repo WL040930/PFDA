@@ -40,7 +40,7 @@ library(randomForest)
 ### DATA IMPORT ###
 ################################################################################
 
-FILE_PATH <- "C:\\Users\\limwe\\OneDrive\\Documents\\PFDA\\4.hackingdata.csv"
+FILE_PATH <- "C:\\Users\\user\\New folder (2)\\OneDrive - Asia Pacific University\\APU Degree\\YEAR2 SEM1\\PFDA\\PFDA Assigment\\4.hackingdata.csv"
 
 # data populated with csv data
 data <- read.csv(FILE_PATH, stringsAsFactors = FALSE)
