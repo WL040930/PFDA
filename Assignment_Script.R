@@ -16,6 +16,9 @@ if (!requireNamespace("lubridate", quietly = TRUE)) install.packages("lubridate"
 if (!requireNamespace("reshape2", quietly = TRUE)) install.packages("reshape2")
 if (!requireNamespace("mice", quietly = TRUE)) install.packages("mice")
 if (!requireNamespace("tidyr", quietly = TRUE)) install.packages("tidyr")
+if (!requireNamespace("countrycode", quietly = TRUE)) install.packages("countrycode")
+if (!requireNamespace("purrr", quietly = TRUE)) install.packages("purrr")
+if (!requireNamespace("randomForest", quietly = TRUE)) install.packages("randomForest")
 
 library(readxl)
 library(dplyr)
@@ -28,6 +31,9 @@ library(mice)
 library(scales)
 library(tidyr)
 library(stringr)
+library(countrycode)
+library(purrr)
+library(randomForest)
 
 
 ################################################################################
@@ -77,6 +83,7 @@ data <- data[!duplicated(data), ]
 
 # check how many column of date is empty
 # No column is empty
+print("Missing Data - Date")
 sum(is.na(data$date)) / nrow(data)
 
 #' Detect and identify distinct date formats in a given vector
@@ -124,6 +131,7 @@ detect_date_formats <- function(date_vector) {
 
 # print all the available date format in date column 
 # print results: yyyy-mm-dd
+print("Original Date Format")
 print(detect_date_formats(data$date))
 
 
@@ -149,7 +157,8 @@ table(data$year)
 ##########################
 
 # Chech how many OS is NA
-# Since only 0.046% of data is missing, therefore, it is safe to just disable it
+# Since only 0.046 of data is missing, therefore, it is safe to just disable it
+print("Missing data - OS")
 sum(is.na(data$os)) / nrow(data)
 
 #' Group OS into Category 
@@ -165,7 +174,7 @@ sum(is.na(data$os)) / nrow(data)
 #' analysis, reporting, and visualization. This will help in simplifying the 
 #' dataset by reducing redundancy, enhancing interpretability, and ensuring 
 #' consistency when analyzing trends or patterns across similar OS families.
-
+#' 
 categorize_os <- function(data) {
   data$os_category <- case_when(
     grepl("Windows|Win|Microsoft", data$os, ignore.case = TRUE) & !grepl("Phone|Mobile", data$os, ignore.case = TRUE) ~ "Windows", 
@@ -183,63 +192,136 @@ data <- categorize_os(data)
 # Check the cleaned data
 table(data$os_category)
 
+##################################
+### DATA CLEANING - Web Server ###
+##################################
+
+#' Clean and Standardize Web Server Names
+#'
+#' This function takes in a vector of web server names (including versions or additional information) 
+#' and standardizes them by removing extra details and grouping similar servers under a common name.
+#'
+#' @param webserver Character vector: A vector of web server names, which may include versions and other extra information.
+#' 
+#' @return Character vector: A vector of standardized web server names, where each entry is grouped under a common category 
+#' like "IIS", "nginx", "Apache", etc. If no match is found, the function returns `NA` for that entry.
+#'
+clean_webserver <- function(webserver) {
+  # Remove versions and extra information after '/'
+  cleaned <- str_replace_all(webserver, "\\/.*", "")  # Remove everything after '/'
+  
+  # Standardize common web servers by grouping them into broader categories
+  cleaned <- case_when(
+    str_detect(cleaned, "IIS") ~ "IIS",
+    str_detect(cleaned, "nginx") ~ "nginx",
+    str_detect(cleaned, "Apache") ~ "Apache",
+    str_detect(cleaned, "lighttpd") ~ "lighttpd",
+    str_detect(cleaned, "Zeus") ~ "Zeus",
+    str_detect(cleaned, "Tomahawk") ~ "Tomahawk",
+    str_detect(cleaned, "Oracle") ~ "Oracle",
+    str_detect(cleaned, "Sun") ~ "Sun",
+    str_detect(cleaned, "Microsoft") ~ "Microsoft",
+    str_detect(cleaned, "Squid") ~ "Squid",
+    str_detect(cleaned, "Varnish") ~ "Varnish",
+    TRUE ~ NA
+  )
+  
+  return(cleaned)  # Return the cleaned and standardized web server names
+}
+
+# Apply cleaning function to the 'webserver' column
+data <- data %>%
+  mutate(webserver_cleaned = clean_webserver(webserver))
+
+# Check the distribution of the cleaned webserver data
+table(data$webserver_cleaned)
+
+
 ###############################
 ### DATA CLEANING - Country ###
 ###############################
 
 # check how many row of contry is NA 
+# 0.3175 data is missing 
+print("Missing Data - Country")
 sum(is.na(data$country)) / nrow(data)
 
+#' Standardize country names
+#'
+#' @param country Character: The country name to be standardized.
+#' @param standard_list DataFrame: A DataFrame containing the standard country names.
+#' @return Character: The standardized country name.
+#' 
+standardize_country <- function(country, standard_list) {
+  if (is.na(country)) return(NA_character_)  # Return NA if country is missing
+  
+  # Use Jaro-Winkler distance to find the best match from standard list
+  distances <- stringdist::stringdist(tolower(country), tolower(standard_list$country.name.en), method = "jw")
+  
+  # Find the best match
+  best_match <- standard_list$country.name.en[which.min(distances)]
+  
+  return(best_match) # Return the standardized country name
+}
 
-# Convert country names to lowercase
-data$country <- tolower(data$country)
+# Prepare standardized country list from countrycode package
+standard_countries <- countrycode::codelist %>% 
+  select(country.name.en) %>% 
+  distinct() %>% 
+  filter(!is.na(country.name.en))
 
-# DATA CLEANING - COUNTRY
-# Initialize the 'continent ' column
-data$continent  <- NA
+# Correct misspelled/abbreviated/differently cased country names in 'data' and convert to lowercase
+data <- data %>%
+  mutate(
+    country_cleaned = map_chr(country, ~ standardize_country(.x, standard_countries)),  # Apply function
+  )
 
-# Define the countries for each continent 
-north_america <- c("united states", "canada", "mexico", "costarica", "panama", "guatemala", "belize", 
-                   "jamaica", "dominican republic", "cuba", "haiti")
-south_america <- c("argentina", "brazil", "colombia", "peru", "venezuela", "chile", "ecuador", "bolivia", 
-                   "paraguay", "suriname", "guyana")
-europe <- c("united kingdom", "germany", "france", "italy", "spain", "sweden", "netherlands", "belgium", 
-            "denmark", "romania", "poland", "norway", "portugal", "greece", "switzerland", "austria", 
-            "finland", "ireland", "czech republic", "hungary", "bulgaria", "slovenia", "slovakia", 
-            "moldova", "lithuania", "latvia", "estonia", "liechtenstein", "monaco", "san marino", "andorra", 
-            "albania", "kosovo", "malta", "armenia", "georgia")
-asia <- c("india", "china", "japan", "south korea", "taiwan", "hong kong", "thailand", "malaysia", 
-          "singapore", "indonesia", "philippines", "pakistan", "bangladesh", "nepal", "afghanistan", 
-          "israel", "lebanon", "sri lanka", "myanmar", "vietnam", "mongolia", "bangkok", "brunei darussalam", 
-          "maldives")
-africa <- c("south africa", "egypt", "algeria", "kenya", "nigeria", "tunisia", "ghana", "ethiopia", 
-            "uganda", "tanzania", "zambia", "namibia", "gabon", "liberia", "congo", "mozambique", "senegal", 
-            "mauritius", "zimbabwe", "botswana", "mali", "cameroon", "sierra leone", "burundi", "burkina faso", 
-            "mauritania", "gambia", "reunion", "seychelles")
-middle_east <- c("saudi arabia", "united arab emirates", "oman", "qatar", "bahrain", "kuwait", "syrian arab republic", 
-                 "iraq", "yemen")
-oceania <- c("australia", "new zealand", "papua new guinea", "fiji", "samoa", "vanuatu", "tonga", "solomon islands", 
-             "micronesia", "marshall islands", "palau", "nauru")
+table(data$country_cleaned)
 
-# Apply categorization
-data$continent [data$country %in% north_america] <- "North America"
-data$continent [data$country %in% south_america] <- "South America"
-data$continent [data$country %in% europe] <- "Europe"
-data$continent [data$country %in% asia] <- "Asia"
-data$continent [data$country %in% africa] <- "Africa"
-data$continent [data$country %in% middle_east] <- "Middle East"
-data$continent [data$country %in% oceania] <- "Oceania"
 
-# Handle ambiguous or special cases
-data$continent [data$country %in% c("europe", "asia/pacific region", "unknown", "anonymous proxy", 
-                               "satellite provider", "palastinian territory", "americansamoa", 
-                               "virginislands(british)", "virginislands(u.s.)")] <- NA
+#' Since 30% of the data is missing, removing these rows and conduct analysis
+#' directly might cause inaccurate the data, therefore, we choose to use 
+#' machine learning to learn the pattern and fill in the data 
 
-# Clean up trailing spaces
-data$continent  <- trimws(data$continent )
+# Convert categorical variables to factors
+data$os_category <- as.factor(data$os_category)
+data$country_cleaned <- as.factor(data$country_cleaned)
 
-# Count non-NA values in the 'continent ' column
-sum(!is.na(data$continent ))
+# Handle missing os_category using the most frequent value
+most_frequent_os <- names(sort(table(data$os_category), decreasing = TRUE))[1]
+data$os_category[is.na(data$os_category)] <- most_frequent_os
+
+# Split dataset into known and unknown country_cleaned
+train_data <- data %>% filter(!is.na(country_cleaned))
+test_data <- data %>% filter(is.na(country_cleaned))
+
+# Train a random forest model
+model <- randomForest(country_cleaned ~ downtime + year + os_category, data = train_data, ntree = 100, importance = TRUE)
+
+# Predict missing country_cleaned values
+test_data$country_cleaned <- predict(model, test_data)
+
+# Combine back the dataset
+data$country_cleaned[is.na(data$country_cleaned)] <- test_data$country_cleaned
+
+# View the updated dataset
+print(data)
+
+# Group the data into continent
+data$continent <- countrycode(data$country_cleaned, origin = "country.name", destination = "continent")
+
+# View the updated dataset with the continent column
+print(data)
+
+# Optionally, group by continent and summarize if needed
+continent_summary <- data %>%
+  group_by(continent) %>%
+  summarize(count = n())
+
+# View continent summary
+print(continent_summary)
+
+
 
 # ensure downtime is numeric 
 data$downtime <- as.numeric(data$downtime)
