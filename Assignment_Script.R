@@ -3,7 +3,10 @@
 # Chang Qi Eue - TP065956
 # Lee Jun Zhe - TP065879
 
-# Import required libraries
+#####################################################################################################
+### Import Necessary Packages ###
+#####################################################################################################
+
 if (!requireNamespace("readxl", quietly = TRUE)) install.packages("readxl")
 if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
 if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
@@ -24,54 +27,169 @@ library(reshape2)
 library(mice)
 library(scales)
 library(tidyr)
+library(stringr)
 
-##############################################################################
-# Declare file path for the dataset
 
-FILE_PATH <- "C:\\Users\\user\\New folder (2)\\OneDrive - Asia Pacific University\\APU Degree\\YEAR2 SEM1\\PFDA\\PFDA Assigment\\4.hackingdata.csv"
-# Import the CSV file
+################################################################################
+### DATA IMPORT ###
+################################################################################
+
+FILE_PATH <- "C:\\Users\\limwe\\OneDrive\\Documents\\PFDA\\4.hackingdata.csv"
+
+# data populated with csv data
 data <- read.csv(FILE_PATH, stringsAsFactors = FALSE)
 
-# Change all column titles to lowercase
-colnames(data) <- tolower(colnames(data))
+################################################################################
+### DATA CLEANING ###
+################################################################################
 
-# Replace missing values in other columns
-data <- replace(data, data == "", NA)
 
-# Replace missing values for specific columns
-data$notify[is.na(data$notify)] <- "Unknown"
-data$url[is.na(data$url)] <- "Unknown"
-data$ip[is.na(data$ip)] <- "Unknown"
-data$country[is.na(data$country)] <- "Unknown"
-data$os[is.na(data$os)] <- "Unknown"
-data$webserver[is.na(data$webserver)] <- "Unknown"
+#' Clean Invalid Values in Dataset
+#'
+#' @param data DataFrame: The dataset to clean.
+#' @return DataFrame: The cleaned dataset where 'unknown', 'empty' and 'null' values are replaced with NA.
+#'
+#' @details
+#' This function replaces 'unknown', 'Unkno', 'null', and empty string ("") values with NA across all columns.
+#' 
+cleanInvalidValues <- function(data) {
+  data <- data %>%
+    # Convert column names to lowercase
+    rename_with(tolower) %>%
 
-# For certain columns, replace NA with more specific values
-data$encoding[is.na(data$encoding)] <- "NULL"
-data$lang[is.na(data$lang)] <- "NULL"
-data$ransom[is.na(data$ransom)] <- NA
-data$downtime[is.na(data$downtime)] <- NA
-data$loss[is.na(data$loss)] <- NA
+    # Replace invalid values ("Unknown", "null", "Unkno", "") with NA
+    mutate(across(everything(), ~ case_when(
+      str_detect(as.character(.), "(?i)^Unkno|^null|^unknown$") | as.character(.) == "" ~ NA,
+      TRUE ~ .
+    )))
+  
+  return(data)
+}
+data <- cleanInvalidValues(data)
 
-# Standardize incorrect entries
-data$os[data$os == "Unkno"] <- "Unknown"
-data$country[data$country == "UNKNOWN"] <- "Unknown"
-data$encoding[data$encoding == "N"] <- "NULL"
 
-# Check for duplicate rows and remove them
+#' remove duplicated row
 data <- data[!duplicated(data), ]
 
-# DATA CLEANING - COUNTRY
-# Categorize OS field into broader categories and replace in the original data
-data$os_category <- case_when(
-  grepl("Windows|Win|Microsoft", data$os, ignore.case = TRUE) & !grepl("Phone|Mobile", data$os, ignore.case = TRUE) ~ "Windows", 
-  grepl("Linux|Ubuntu|Debian|Red Hat|CentOS|Fedora|Mint", data$os, ignore.case = TRUE) ~ "Linux",  
-  grepl("BSD|FreeBSD|OpenBSD|NetBSD|Tru64|AIX|Solaris|HP-UX|IRIX|Unix", data$os, ignore.case = TRUE) ~ "Unix",  
-  grepl("MacOS|OS X", data$os, ignore.case = TRUE) ~ "MacOS",  
-  grepl("Android|iOS|Windows Phone|iPXE|F5|Cisco|Juniper|Netgear|HP", data$os, ignore.case = TRUE) ~ "Embedded", 
-  grepl("Unknown|unknown", data$os, ignore.case = TRUE) ~ "Unknown",  # Group 'Unknown' entries
-  TRUE ~ "Others"
-)
+############################
+### DATA CLEANING - DATE ###
+############################
+
+# check how many column of date is empty
+# No column is empty
+sum(is.na(data$date)) / nrow(data)
+
+#' Detect and identify distinct date formats in a given vector
+#' 
+#' @param date_vector A vector of character strings containing potential date entries in various formats.
+#' 
+#' @return A vector of distinct date formats found within the input date_vector.
+#'         The formats are identified using regular expressions and may include:
+#'         - "yyyy-mm-dd": Dates in the format of year-month-day (e.g., "2025-02-06").
+#'         - "yyyy dd mm": Dates in the format of year day month (e.g., "2025 06 02").
+#'         - "yyyy": Dates containing only the year (e.g., "2025").
+#'         - "dd/mm/yyyy": Dates in the format of day/month/year (e.g., "06/02/2025").
+#'         - "dd-mm-yyyy": Dates in the format of day-month-year (e.g., "06-02-2025").
+#'         - "yyyy-mm": Dates in the format of year-month (e.g., "2025-02").
+#'         - "Invalid format": For any entries that don't match any of the specified formats.
+#'
+#' @description
+#' This function checks each element in the input vector against a set of predefined regular
+#' expressions that match common date formats. It returns the unique formats found in the vector.
+#' If a value does not match any recognized date format, it is flagged as "Invalid format".
+#' 
+detect_date_formats <- function(date_vector) {
+  formats <- sapply(date_vector, function(x) {
+    # Check different formats using regular expressions
+    if (grepl("^\\d{4}-\\d{2}-\\d{2}$", x)) {
+      return("yyyy-mm-dd")
+    } else if (grepl("^\\d{4} \\d{2} \\d{2}$", x)) {
+      return("yyyy dd mm")
+    } else if (grepl("^\\d{4}$", x)) {
+      return("yyyy")
+    } else if (grepl("^\\d{2}/\\d{2}/\\d{4}$", x)) {
+      return("dd/mm/yyyy")
+    } else if (grepl("^\\d{2}-\\d{2}-\\d{4}$", x)) {
+      return("dd-mm-yyyy")
+    } else if (grepl("^\\d{4}-\\d{2}$", x)) {
+      return("yyyy-mm")
+    } else {
+      return("Invalid format")
+    }
+  })
+  
+  # Return distinct formats
+  return(unique(formats))
+}
+
+# print all the available date format in date column 
+# print results: yyyy-mm-dd
+print(detect_date_formats(data$date))
+
+
+#' Parse date column and extract the year
+#' 
+#' @param data DataFrame: The dataset containing a 'date' column with varying date formats.
+#' 
+#' @description
+#' The code first uses the `parse_date_time` function from the `lubridate` package to
+#' parse the 'date' column in the dataset into a consistent Date format. It supports
+#' multiple date formats, including day-month-year (dmy), month-day-year (mdy),
+#' year-month-day (ymd), and a format that includes day, month as a word, and year (b d Y).
+#' After parsing the dates, it then extracts the year from each date and stores it in a new
+#' column called 'year', which is converted to a numeric type for further analysis.
+data$date <- parse_date_time(data$date, orders = c("dmy", "mdy", "ymd", "b d Y"))
+data$year <- as.numeric(format(as.Date(data$date), "%Y"))
+
+# check the cleaned data
+table(data$year)
+
+##########################
+### Data CLeaning - OS ###
+##########################
+
+# Chech how many OS is NA
+# Since only 0.046% of data is missing, therefore, it is safe to just disable it
+sum(is.na(data$os)) / nrow(data)
+
+#' Group OS into Category 
+#' 
+#' @param data DataFrame: The dataset to be categorized
+#' @return DataFrame: The categorized dataset.
+#' 
+#' @details
+#' The "OS" field contains entries for different versions of the same family of 
+#' operating systems (e.g., various versions of Windows, Linux distributions, 
+#' etc.). It is more efficient and meaningful to group these versions together 
+#' under broader categories (e.g., "Windows", "Linux", "MacOS") for better 
+#' analysis, reporting, and visualization. This will help in simplifying the 
+#' dataset by reducing redundancy, enhancing interpretability, and ensuring 
+#' consistency when analyzing trends or patterns across similar OS families.
+
+categorize_os <- function(data) {
+  data$os_category <- case_when(
+    grepl("Windows|Win|Microsoft", data$os, ignore.case = TRUE) & !grepl("Phone|Mobile", data$os, ignore.case = TRUE) ~ "Windows", 
+    grepl("Linux|Ubuntu|Debian|Red Hat|CentOS|Fedora|Mint", data$os, ignore.case = TRUE) ~ "Linux",  
+    grepl("BSD|FreeBSD|OpenBSD|NetBSD|Tru64|AIX|Solaris|HP-UX|IRIX|Unix", data$os, ignore.case = TRUE) ~ "Unix",  
+    grepl("MacOS|OS X", data$os, ignore.case = TRUE) ~ "MacOS",  
+    grepl("Android|iOS|Windows Phone|iPXE|F5|Cisco|Juniper|Netgear|HP", data$os, ignore.case = TRUE) ~ "Embedded", 
+    grepl("Unknown|unknown", data$os, ignore.case = TRUE) ~ "Unknown",  # Group 'Unknown' entries
+    TRUE ~ "Others"
+  )
+  return(data)
+}
+data <- categorize_os(data) 
+
+# Check the cleaned data
+table(data$os_category)
+
+###############################
+### DATA CLEANING - Country ###
+###############################
+
+# check how many row of contry is NA 
+sum(is.na(data$country)) / nrow(data)
+
 
 # Convert country names to lowercase
 data$country <- tolower(data$country)
@@ -123,26 +241,6 @@ data$continent  <- trimws(data$continent )
 # Count non-NA values in the 'continent ' column
 sum(!is.na(data$continent ))
 
-
-# DATA CLEANING - DATE
-# Convert incomplete year-only entries (e.g., 2015) to full date (e.g., 2015-01-01)
-data$date <- ifelse(grepl("^\\d{4}$", data$date), paste0(data$date, "-01-01"), data$date)
-
-data$date <- parse_date_time(data$date, orders = c("dmy", "mdy", "ymd", "b d Y"))
-
-# Handle invalid dates by setting them to 'Unknown'
-invalid_dates <- is.na(data$date)
-if (any(invalid_dates)) {
-  print("unknown")
-  cat("There are invalid dates. Replacing them with 'Unknown'.\n")
-  data$date <- as.character(data$date)  # Convert to character to allow "Unknown"
-  data$date[invalid_dates] <- "Unknown"
-} else {
-  data$date <- as.character(data$date)
-}
-
-data$year <- as.numeric(format(as.Date(data$date), "%Y"))
-
 # ensure downtime is numeric 
 data$downtime <- as.numeric(data$downtime)
 
@@ -152,7 +250,6 @@ View(data)
 # Lim Wei Lun
 
 # Check how many data is unknown
-sum(data$os_category == "Unknown") / nrow(data)
 
 # Although only 4.6% of data is unknown, we choose to ignore these column 
 # while conducting analysis. To avoid affecting others analysis.
@@ -391,7 +488,6 @@ ggplot(downtime_change, aes(x = reorder(continent, change_in_downtime), y = chan
   theme(legend.position = "none")
 
 ##############################################################################
-
 
 write.csv(data, "output.csv", row.names = FALSE)
 
