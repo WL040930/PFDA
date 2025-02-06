@@ -321,22 +321,42 @@ continent_summary <- data %>%
 # View continent summary
 print(continent_summary)
 
-
+#####################################################################################################
+### Data Validation ###
+#####################################################################################################
 
 # ensure downtime is numeric 
 data$downtime <- as.numeric(data$downtime)
 
-View(data)
 
-##############################################################################
-# Lim Wei Lun
 
-# Check how many data is unknown
 
-# Although only 4.6% of data is unknown, we choose to ignore these column 
-# while conducting analysis. To avoid affecting others analysis.
 
+
+
+
+
+
+
+
+
+#####################################################################################################
+### Analysis ###
+#####################################################################################################
+
+##############################
+### Lim Wei Lun - TP069058 ###
+##############################
+
+############
+### RQ 1 ###
+############
 # RQ 1 - Which year has the highest system downtime across different operating system categories?
+
+os_count_by_year <- data %>%
+  group_by(year, os_category) %>%
+  summarize(count = n(), .groups = "drop")
+
 
 # Calculate the total downtime for each year
 sum_data <- data %>%
@@ -405,7 +425,6 @@ ggplot(avg_data, aes(x = factor(year), y = avg_downtime, fill = os_category)) +
         axis.text = element_text(size = 12),  # Adjust axis text size
         axis.title = element_text(size = 14))  # Adjust axis title size
 
-      
 # Extra Feature 1
 # Create the heatmap with a red color gradient
 
