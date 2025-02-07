@@ -386,22 +386,42 @@ cat("Number of rows removed: ", nrow(data) - nrow(data_no_outliers))
 ### RQ 1 ###
 ############
 #' LIM WEI LUN - TP069058
-#' RQ 2
+#' RQ 1
 #' Which OS category contributes the most to the frequency of downtime?
 
-# Step 1: Count the frequency of each OS category
-os_frequency <- data %>%
+# Step 1: Count the number of incidents per year for each OS category
+incident_frequency_per_year_os <- data %>%
+  group_by(os_category, year) %>%
+  summarize(incident_count = n(), .groups = "drop")
+
+# Step 2: Calculate the average incident count across all years for each OS category
+avg_incidents_os <- incident_frequency_per_year_os %>%
   group_by(os_category) %>%
-  summarise(frequency = n())
+  summarize(avg_incident_count = mean(incident_count, na.rm = TRUE), .groups = "drop")
 
-# Step 2: Create a pie chart for OS frequency
-ggplot(os_frequency, aes(x = "", y = frequency, fill = os_category)) +
-  geom_bar(stat = "identity", width = 1) +
-  coord_polar(theta = "y") +  
-  labs(title = "Pie Chart of OS Categories Contributing to Downtime Frequency") +
-  theme_minimal() +
-  theme(axis.text.x = element_blank())  # Hide axis labels
-
+# Step 3: Create the bar plot with the average incident count for each OS category
+ggplot(avg_incidents_os, aes(x = reorder(os_category, -avg_incident_count), 
+                             y = avg_incident_count, 
+                             fill = os_category)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black") +  # Fixed syntax error in width parameter
+  labs(
+    title = "Average Incident Count Across Years by OS Category",
+    x = "Operating System Category",
+    y = "Average Incident Count"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "darkblue"),
+    axis.text.y = element_text(face = "bold", color = "darkred"),
+    plot.title = element_text(face = "bold", hjust = 0.5, color = "purple"),
+    legend.position = "none"
+  ) +
+  geom_text(aes(label = round(avg_incident_count, 1)), 
+            vjust = -0.5, 
+            size = 5, 
+            fontface = "bold", 
+            color = "black") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1)))  # Add space for top labels
 
 ############
 ### RQ 2 ###
@@ -439,36 +459,62 @@ ggplot(avg_data, aes(x = year, y = avg_downtime, color = os_category, group = os
 ############
 #' LIM WEI LUN - TP069058
 #' RQ 3
-#' Which operating system has the most years where it experienced the lowest average downtime?
+#' Which operating system is recommended based on the highest score, where the 
+#' score is calculated by having the lowest average downtime 
+#' and the least occurrences of the highest downtime?
 
-# Step 1: Group the data by year and os_category to calculate average downtime
+# Step 1 & 2: Group data by year & os_category, calculate avg downtime, 
+# and identify highest and lowest downtime for each year
 avg_downtime_per_os <- data %>%
-  filter(!is.na(data$os_category)) %>%
+  filter(!is.na(os_category)) %>%
   group_by(year, os_category) %>%
   summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = 'drop')
 
-# Step 2: Identify the OS with the highest downtime for each year
+# Identify highest and lowest downtime by year in one step
 highest_downtime_per_year <- avg_downtime_per_os %>%
   group_by(year) %>%
   filter(avg_downtime == max(avg_downtime)) %>%
   ungroup()
 
-# Step 3: Count how many times each OS category had the highest downtime
-os_count <- highest_downtime_per_year %>%
-  group_by(os_category) %>%
-  summarise(count = n(), .groups = 'drop')
+lowest_downtime_per_year <- avg_downtime_per_os %>%
+  group_by(year) %>%
+  filter(avg_downtime == min(avg_downtime)) %>%
+  ungroup()
 
-# Step 4: Generate the pie chart with count labels
-ggplot(os_count, aes(x = "", y = count, fill = os_category)) +
-  geom_bar(stat = "identity", width = 1) +  # Bar chart to mimic pie
-  coord_polar(theta = "y") +  # Convert to polar coordinates to make it a pie chart
-  labs(title = "Count of Highest Downtime OS Categories Across Years", fill = "OS Category") +
+# Step 3: Count occurrences for highest and lowest downtime and calculate score
+combined_os_count <- full_join(
+  highest_downtime_per_year %>% group_by(os_category) %>% summarise(highest_count = n(), .groups = 'drop'),
+  lowest_downtime_per_year %>% group_by(os_category) %>% summarise(lowest_count = n(), .groups = 'drop'),
+  by = "os_category"
+) %>%
+  replace_na(list(highest_count = 0, lowest_count = 0)) %>%
+  mutate(score = lowest_count - highest_count)
+
+# Step 4: Reshape data for stacked bar chart
+combined_os_count_long <- combined_os_count %>%
+  gather(key = "downtime_type", value = "count", highest_count, lowest_count)
+
+# Step 5: Create the plot with horizontal stacked bars, and only display the score once
+ggplot(combined_os_count_long, aes(x = os_category, y = count, fill = downtime_type)) +
+  geom_bar(stat = "identity") +  # Stacked bars
+  coord_flip() +  # Horizontal bars
+  scale_fill_manual(values = c("highest_count" = "#E74C3C", "lowest_count" = "#27AE60")) +  # Colors
+  geom_text(aes(label = ifelse(downtime_type == "lowest_count", paste("Score:", score), "")), 
+            position = position_stack(vjust = 0.5), color = "black", size = 5, hjust = -0.1) +  # Only Score label for lowest downtime
+  labs(
+    title = "Highest and Lowest Downtime for OS Categories with Scores", 
+    x = "OS Category", 
+    y = "Count of Downtime", 
+    fill = "Downtime Type"
+  ) +
   theme_minimal() +
-  theme(axis.text.x = element_blank(),  # Remove x-axis text
-        axis.title.x = element_blank(),  # Remove x-axis title
-        plot.title = element_text(hjust = 0.5)) +  # Center the title
-  geom_text(aes(label = paste(count)), position = position_stack(vjust = 0.5), color = "white")  # Display counts
-
+  theme(
+    axis.text.y = element_text(size = 12, color = "darkblue"),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold", color = "darkred"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    axis.title.y = element_text(size = 12, color = "darkgreen")
+  )
 
 ############
 ### RQ 4 ###
