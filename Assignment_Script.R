@@ -7,7 +7,6 @@
 ### Import Necessary Packages ###
 #####################################################################################################
 
-if (!requireNamespace("readxl", quietly = TRUE)) install.packages("readxl")
 if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
 if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
 if (!requireNamespace("DBI", quietly = TRUE)) install.packages("DBI")
@@ -15,12 +14,14 @@ if (!requireNamespace("RSQLite", quietly = TRUE)) install.packages("RSQLite")
 if (!requireNamespace("lubridate", quietly = TRUE)) install.packages("lubridate")
 if (!requireNamespace("reshape2", quietly = TRUE)) install.packages("reshape2")
 if (!requireNamespace("mice", quietly = TRUE)) install.packages("mice")
+if (!requireNamespace("scales", quietly = TRUE)) install.packages("scales")
 if (!requireNamespace("tidyr", quietly = TRUE)) install.packages("tidyr")
+if (!requireNamespace("stringr", quietly = TRUE)) install.packages("stringr")
 if (!requireNamespace("countrycode", quietly = TRUE)) install.packages("countrycode")
 if (!requireNamespace("purrr", quietly = TRUE)) install.packages("purrr")
 if (!requireNamespace("randomForest", quietly = TRUE)) install.packages("randomForest")
+if (!requireNamespace("RColorBrewer", quietly = TRUE)) install.packages("RColorBrewer")
 
-library(readxl)
 library(dplyr)
 library(ggplot2)
 library(DBI)
@@ -34,6 +35,7 @@ library(stringr)
 library(countrycode)
 library(purrr)
 library(randomForest)
+library(RColorBrewer)
 
 
 ################################################################################
@@ -153,7 +155,7 @@ data$year <- as.numeric(format(as.Date(data$date), "%Y"))
 table(data$year)
 
 ##########################
-### Data CLeaning - OS ###
+### Data Cleaning - OS ###
 ##########################
 
 # Chech how many OS is NA
@@ -177,19 +179,17 @@ sum(is.na(data$os)) / nrow(data)
 #' 
 categorize_os <- function(data) {
   data$os_category <- case_when(
-    is.na(data$os) ~ NA_character_,  
-    grepl("Windows|Win|Microsoft", data$os, ignore.case = TRUE) & !grepl("Phone|Mobile", data$os, ignore.case = TRUE) ~ "Windows", 
-    grepl("Linux|Ubuntu|Debian|Red Hat|CentOS|Fedora|Mint", data$os, ignore.case = TRUE) ~ "Linux",  
-    grepl("BSD|FreeBSD|OpenBSD|NetBSD|Tru64|AIX|Solaris|HP-UX|IRIX|Unix", data$os, ignore.case = TRUE) ~ "Unix",  
-    grepl("MacOS|OS X", data$os, ignore.case = TRUE) ~ "MacOS",  
-    grepl("Android|iOS|Windows Phone|iPXE|F5|Cisco|Juniper|Netgear|HP", data$os, ignore.case = TRUE) ~ "Embedded", 
-    grepl("Unknown|unknown", data$os, ignore.case = TRUE) ~ "Unknown",  # Group 'Unknown' entries
+    grepl("Windows|Win|Microsoft", data$os, ignore.case = TRUE) & !grepl("Phone|Mobile", data$os, ignore.case = TRUE) ~ "Windows",
+    grepl("Linux|Ubuntu|Debian|Red Hat|CentOS|Fedora|Mint", data$os, ignore.case = TRUE) ~ "Linux",
+    grepl("BSD|FreeBSD|OpenBSD|NetBSD|Tru64|AIX|Solaris|HP-UX|IRIX|Unix", data$os, ignore.case = TRUE) ~ "Unix",
+    grepl("MacOS|OS X", data$os, ignore.case = TRUE) ~ "MacOS",
+    grepl("Android|iOS|Windows Phone|iPXE|F5|Cisco|Juniper|Netgear|HP", data$os, ignore.case = TRUE) ~ "Embedded",
     TRUE ~ "Others"
   )
   return(data)
 }
 
-data <- categorize_os(data) 
+data <- categorize_os(data)
 
 # Check the cleaned data
 table(data$os_category)
@@ -281,43 +281,57 @@ data <- data %>%
 table(data$country_cleaned)
 
 
-#' Since 30% of the data is missing, removing these rows and conduct analysis
+#' Since 31.7% of the data is missing, removing these rows and conduct analysis
 #' directly might cause inaccurate the data, therefore, we choose to use 
 #' machine learning to learn the pattern and fill in the data 
+sum(is.na(data$country_cleaned)) / count(data)
 
-# Convert categorical variables to factors
+# --------------------------------------------------------------------------------
+# Step 1: Convert categorical variables to factors
+# --------------------------------------------------------------------------------
+
 data$os_category <- as.factor(data$os_category)
 data$country_cleaned <- as.factor(data$country_cleaned)
 
-# Split dataset into known and unknown country_cleaned
-train_data <- data %>% filter(!is.na(country_cleaned) & !is.na(os_category))  # Filter out rows with NA os_category
-test_data <- data %>% filter(is.na(country_cleaned))
+# --------------------------------------------------------------------------------
+# Step 2: Create a continent column from country_cleaned using countrycode
+#         For rows with a known country, countrycode returns the corresponding continent.
+# --------------------------------------------------------------------------------
 
-# Train a random forest model
-model <- randomForest(country_cleaned ~ downtime + year + os_category, data = train_data, ntree = 100, importance = TRUE)
+data$continent <- countrycode(data$country_cleaned,
+                              origin = "country.name",
+                              destination = "continent")
+table(data$continent)
 
-# Predict missing country_cleaned values
-test_data$country_cleaned <- predict(model, test_data)
+data$continent <- as.factor(data$continent)
 
-# Combine back the dataset
-data$country_cleaned[is.na(data$country_cleaned)] <- test_data$country_cleaned
+# --------------------------------------------------------------------------------
+# Step 3: Split the data into training (rows with known continent) and 
+#         testing (rows with missing continent) datasets.
+# --------------------------------------------------------------------------------
 
-# View the updated dataset
-print(data)
+train_data <- data %>% filter(!is.na(continent))
+test_data <- data %>% filter(is.na(continent))
 
-# Group the data into continent
-data$continent <- countrycode(data$country_cleaned, origin = "country.name", destination = "continent")
+# --------------------------------------------------------------------------------
+# Step 4: Train a Random Forest model to predict the missing continent values.
+#         Since continent is now a factor, Random Forest will perform classification.
+# --------------------------------------------------------------------------------
 
-# View the updated dataset with the continent column
-print(data)
+if (nrow(test_data) > 0) {
+  model <- randomForest(continent ~ downtime + year + os_category,
+                        data = train_data,
+                        ntree = 100,
+                        importance = TRUE)
+  
+  # Predict continent for rows with missing continent
+  test_data$continent <- predict(model, test_data)
+  
+  # Replace the missing continent values in the original dataset with the predictions
+  data$continent[is.na(data$continent)] <- test_data$continent
+}
 
-# Optionally, group by continent and summarize if needed
-continent_summary <- data %>%
-  group_by(continent) %>%
-  summarize(count = n())
-
-# View continent summary
-print(continent_summary)
+table(data$continent)
 
 #####################################################################################################
 ### Data Validation ###
@@ -371,50 +385,69 @@ cat("Number of rows removed: ", nrow(data) - nrow(data_no_outliers))
 ############
 ### RQ 1 ###
 ############
-# RQ 1 - Which year has the highest system downtime across different operating system categories?
+#' LIM WEI LUN - TP069058
+#' RQ 1
+#' Which OS category contributes the most to the frequency of downtime?
 
-os_count_by_year <- data %>%
-  group_by(year, os_category) %>%
-  summarize(count = n(), .groups = "drop")
+# Step 1: Count the number of incidents per year for each OS category
+incident_frequency_per_year_os <- data %>%
+  group_by(os_category, year) %>%
+  summarize(incident_count = n(), .groups = "drop")
 
+# Step 2: Calculate the average incident count across all years for each OS category
+avg_incidents_os <- incident_frequency_per_year_os %>%
+  group_by(os_category) %>%
+  summarize(avg_incident_count = mean(incident_count, na.rm = TRUE), .groups = "drop")
 
-# Calculate the total downtime for each year
-sum_data <- data %>%
-  filter(os_category != "Unknown") %>%
-  group_by(year, os_category) %>%
-  summarise(total_downtime = sum(downtime, na.rm = TRUE), .groups = 'drop')
-
-ggplot(sum_data, aes(x = factor(year), y = total_downtime, fill = os_category)) +
-  geom_bar(stat = "identity", position = "stack") +  # Create stacked bars
-  labs(title = "Total System Downtime by Year and OS Category",
-       x = "Year",
-       y = "Total Downtime",
-       fill = "OS Category") +
-  scale_y_continuous(labels = number_format(accuracy = 1)) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Step 3: Create the bar plot with the average incident count for each OS category
+ggplot(avg_incidents_os, aes(x = reorder(os_category, -avg_incident_count), 
+                             y = avg_incident_count, 
+                             fill = os_category)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black") +  # Fixed syntax error in width parameter
+  labs(
+    title = "Average Incident Count Across Years by OS Category",
+    x = "Operating System Category",
+    y = "Average Incident Count"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "darkblue"),
+    axis.text.y = element_text(face = "bold", color = "darkred"),
+    plot.title = element_text(face = "bold", hjust = 0.5, color = "purple"),
+    legend.position = "none"
+  ) +
+  geom_text(aes(label = round(avg_incident_count, 1)), 
+            vjust = -0.5, 
+            size = 5, 
+            fontface = "bold", 
+            color = "black") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1)))  # Add space for top labels
 
 ############
 ### RQ 2 ###
 ############
+#' LIM WEI LUN - TP069058
+#' RQ 2
+#' What is the trend in average system downtime by year for each operating system category?
 
-# Calculate average downtime by year and OS category
+# Step 1: Filter out "Unknown" OS category and calculate average downtime per year per OS
 avg_data <- data %>%
   filter(os_category != "Unknown") %>%
   group_by(year, os_category) %>%
   summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = 'drop')
 
-# Calculate the correlation between year and average downtime for each OS category
+# Step 2: Calculate the correlation between year and average downtime for each OS category
 correlation_by_os <- avg_data %>%
   group_by(os_category) %>%
   summarise(correlation = cor(year, avg_downtime, use = "complete.obs"))
 
-# Create scatter plot with linear regression line
-ggplot(avg_data, aes(x = year, y = avg_downtime, color = os_category)) +
+# Step 3: Create scatter plot with linear regression line & connected dots
+ggplot(avg_data, aes(x = year, y = avg_downtime, color = os_category, group = os_category)) +
   geom_point(alpha = 0.7, size = 3) +  # Scatter plot points
-  geom_smooth(method = "lm", se = FALSE, linetype = "dashed") +
+  geom_line(alpha = 0.6, size = 1) +  # Connect the dots with a line
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed") +  # Add linear regression line
   facet_wrap(~ os_category, scales = "free") +  # Facet by OS category
-  labs(title = "Average System Downtime by Year and OS Category",
+  labs(title = "Visualization of Average Downtime Trends per OS Category",
        x = "Year",
        y = "Average Downtime (hours)",
        color = "Operating System Category") +
@@ -424,95 +457,137 @@ ggplot(avg_data, aes(x = year, y = avg_downtime, color = os_category)) +
 ############
 ### RQ 3 ###
 ############
-avg_data <- data %>%
-  filter(os_category != "Unknown") %>%
+#' LIM WEI LUN - TP069058
+#' RQ 3
+#' Which operating system is recommended based on the highest score, where the 
+#' score is calculated by having the lowest average downtime 
+#' and the least occurrences of the highest downtime?
+
+# Step 1 & 2: Group data by year & os_category, calculate avg downtime, 
+# and identify highest and lowest downtime for each year
+avg_downtime_per_os <- data %>%
+  filter(!is.na(os_category)) %>%
   group_by(year, os_category) %>%
   summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = 'drop')
 
-# Create the grouped bar chart
-# Custom colors using scale_fill_manual
-ggplot(avg_data, aes(x = factor(year), y = avg_downtime, fill = os_category)) +
-  geom_bar(stat = "identity", position = "dodge", width = 0.7) +  # Grouped bars
-  labs(title = "Average System Downtime by Year and OS Category",
-       x = "Year",
-       y = "Average Downtime (in hours)",
-       fill = "OS Category") +
-  scale_y_continuous(labels = scales::number_format(accuracy = 0.1)) +  # Format y-axis labels
-  scale_x_discrete(breaks = seq(min(avg_data$year), max(avg_data$year), by = 1)) +  # X-axis breaks for each year
-  scale_fill_manual(values = c("Embedded" = "#F39C12", "Linux" = "#27AE60", 
-                               "Windows" = "#2980B9", "MacOS" = "#8E44AD", 
-                               "Unix" = "#E74C3C", "Others" = "#F1C40F")) +  # Manually assign colors
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels
-        plot.title = element_text(hjust = 0.5),  # Center title
-        axis.text = element_text(size = 12),  # Adjust axis text size
-        axis.title = element_text(size = 14))  # Adjust axis title size
+# Identify highest and lowest downtime by year in one step
+highest_downtime_per_year <- avg_downtime_per_os %>%
+  group_by(year) %>%
+  filter(avg_downtime == max(avg_downtime)) %>%
+  ungroup()
 
-# Extra Feature 1
-# Create the heatmap with a red color gradient
+lowest_downtime_per_year <- avg_downtime_per_os %>%
+  group_by(year) %>%
+  filter(avg_downtime == min(avg_downtime)) %>%
+  ungroup()
 
-ggplot(aggregated_data, aes(x = year, y = os_category, fill = avg_downtime)) +
-  geom_tile() +
-  labs(title = "Heatmap of Average System Downtime by Years and OS Category",
-       x = "Years",
-       y = "Operating System Category",
-       fill = "Average Downtime") +
+# Step 3: Count occurrences for highest and lowest downtime and calculate score
+combined_os_count <- full_join(
+  highest_downtime_per_year %>% group_by(os_category) %>% summarise(highest_count = n(), .groups = 'drop'),
+  lowest_downtime_per_year %>% group_by(os_category) %>% summarise(lowest_count = n(), .groups = 'drop'),
+  by = "os_category"
+) %>%
+  replace_na(list(highest_count = 0, lowest_count = 0)) %>%
+  mutate(score = lowest_count - highest_count)
+
+# Step 4: Reshape data for stacked bar chart
+combined_os_count_long <- combined_os_count %>%
+  gather(key = "downtime_type", value = "count", highest_count, lowest_count)
+
+# Step 5: Create the plot with horizontal stacked bars, and only display the score once
+ggplot(combined_os_count_long, aes(x = os_category, y = count, fill = downtime_type)) +
+  geom_bar(stat = "identity") +  # Stacked bars
+  coord_flip() +  # Horizontal bars
+  scale_fill_manual(values = c("highest_count" = "#E74C3C", "lowest_count" = "#27AE60")) +  # Colors
+  geom_text(aes(label = ifelse(downtime_type == "lowest_count", paste("Score:", score), "")), 
+            position = position_stack(vjust = 0.5), color = "black", size = 5, hjust = -0.1) +  # Only Score label for lowest downtime
+  labs(
+    title = "Highest and Lowest Downtime for OS Categories with Scores", 
+    x = "OS Category", 
+    y = "Count of Downtime", 
+    fill = "Downtime Type"
+  ) +
   theme_minimal() +
-  scale_fill_gradientn(colors = c("white", "lightcoral", "red", "darkred"))
+  theme(
+    axis.text.y = element_text(size = 12, color = "darkblue"),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold", color = "darkred"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    axis.title.y = element_text(size = 12, color = "darkgreen")
+  )
 
 ############
 ### RQ 4 ###
 ############
-avg_downtime_per_os <- data %>%
+#' LIM WEI LUN - TP069058
+#' RQ 4
+#' Which operating system category showed the most improvement in downtime frequency over the years?
+
+# Step 1: Remove rows with missing or "Unknown" values
+clean_data <- data %>%
+  filter(!is.na(year), !is.na(os_category), !is.na(downtime), year != "Unknown", os_category != "Unknown", downtime != "Unknown")
+
+# Step 2: Calculate the average downtime for each operating system by year
+avg_downtime_by_os <- clean_data %>%
   filter(os_category != "Unknown") %>%
   group_by(year, os_category) %>%
   summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = 'drop')
 
-# Calculate the change in average downtime (difference between first and last year)
-downtime_change <- avg_downtime_per_os %>%
+# Step 3: Calculate the change in downtime from the first to the last year
+downtime_diff <- avg_downtime_by_os %>%
   group_by(os_category) %>%
   summarise(
-    first_year_downtime = avg_downtime[which.min(year)],  # Downtime in the first year
-    last_year_downtime = avg_downtime[which.max(year)],   # Downtime in the last year
-    change_in_downtime = last_year_downtime - first_year_downtime
+    first_year_downtime = avg_downtime[which.min(year)],  # Downtime in the earliest year
+    last_year_downtime = avg_downtime[which.max(year)],   # Downtime in the latest year
+    downtime_change = last_year_downtime - first_year_downtime
   )
 
-# Sort the data by change in downtime to highlight the most improvement
-downtime_change <- downtime_change %>%
-  arrange(desc(change_in_downtime))
+# Step 4: Sort the data by the magnitude of the downtime change, focusing on the most significant improvement
+downtime_diff_sorted <- downtime_diff %>%
+  arrange(desc(downtime_change))
 
-# Plot the change in downtime for each OS category
-ggplot(downtime_change, aes(x = reorder(os_category, change_in_downtime), y = change_in_downtime, fill = change_in_downtime > 0)) +
+# Step 5: Create a bar chart of downtime changes for each operating system
+ggplot(downtime_diff_sorted, aes(x = reorder(os_category, downtime_change), y = downtime_change, fill = downtime_change > 0)) +
   geom_bar(stat = "identity", width = 0.7) +  # Bar chart
   labs(title = "Change in Average System Downtime Across Years by OS Category",
        x = "Operating System Category",
-       y = "Change in Average Downtime (hours)",
-       fill = "Improvement") +
-  scale_fill_manual(values = c("TRUE" = "#27AE60", "FALSE" = "#E74C3C")) +  # Green for improvement, red for decline
+       y = "Change in Average Downtime (Days)",
+       fill = "Legend") +  # Adjust legend title 
+  scale_fill_manual(values = c("FALSE" = "#27AE60", "TRUE" = "#E74C3C"), labels = c("TRUE" = "Setback", "FALSE" = "Improve")) +  
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better visibility
 
 ############
 ### RQ 5 ###
 ############
+#' LIM WEI LUN - TP069058
+#' RQ 5
+#' Which OS category had the shortest recovery time?
 
-variance_data <- data %>%
-  filter(os_category != "Unknown") %>%
+# Step 1: Count occurrences per OS category
+os_downtime_summary <- data %>%
   group_by(os_category) %>%
-  summarise(avg_downtime = mean(downtime, na.rm = TRUE),
-            sd_downtime = sd(downtime, na.rm = TRUE), .groups = 'drop') %>%
-  arrange(avg_downtime)  # Arrange by average downtime in ascending order
+  summarise(
+    total_downtime = sum(downtime, na.rm = TRUE), # Sum total downtime
+    occurrences = n(),  # Count occurrences
+    avg_downtime_per_occurrence = total_downtime / occurrences  # Calculate average downtime per incident
+  ) %>%
+  arrange(avg_downtime_per_occurrence)  # Sort by lowest downtime
 
-ggplot(variance_data, aes(x = reorder(os_category, avg_downtime), y = avg_downtime, fill = os_category)) +
-  geom_bar(stat = "identity", width = 0.6) +  # Bar chart for average downtime
-  geom_errorbar(aes(ymin = avg_downtime - sd_downtime, ymax = avg_downtime + sd_downtime), 
-                width = 0.2, color = "black") +  # Error bars for variance (standard deviation)
-  labs(title = "Average Downtime with Variance by OS Category",
-       x = "Operating System Category",
-       y = "Average Downtime (hours)",
-       fill = "OS Category") +
+# Step 2: Visualize with a bar chart including value labels
+ggplot(os_downtime_summary, aes(x = reorder(os_category, avg_downtime_per_occurrence), 
+                                y = avg_downtime_per_occurrence, fill = os_category)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = round(avg_downtime_per_occurrence, 2)),  # Add labels with 2 decimal places
+            hjust = -0.2, size = 4) +  # Adjust text position and size
+  coord_flip() +  # Flip for readability
+  labs(title = "Average Downtime per Occurrence by OS Category",
+       x = "OS Category",
+       y = "Average Downtime (Days)") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(legend.position = "none")  # Hide legend since colors are categorical
+
+
 
 ###############################################################################
 ###############################################################################
@@ -521,107 +596,146 @@ ggplot(variance_data, aes(x = reorder(os_category, avg_downtime), y = avg_downti
 ### Goh Xin Tong - TP069712 ###
 ###############################
 
-# Goh Xin Tong 
-# RQ 1
-# Calculate variance of downtime for each continent 
-state_variance <- data %>%
-  filter(!is.na(continent )) %>%
-  group_by(continent ) %>%
-  summarise(downtime_variance = var(downtime, na.rm = TRUE), .groups = 'drop')
+############
+### RQ 1 ###
+############
+#' Goh Xin Tong - TP069712
+#' RQ 1
+#' Which continents show the greatest reduction in downtime between the first and last years?
 
-# Sort by variance (lowest first, most consistent continent  first)
-state_variance <- state_variance %>%
-  arrange(downtime_variance)
+# Step 1: Calculate the first and last years, and average downtime for each continent
+result <- data %>%
+  group_by(continent) %>%
+  summarize(
+    first_year = min(year),
+    last_year = max(year),
+    avg_downtime_first = mean(downtime[year == min(year)], na.rm = TRUE),
+    avg_downtime_last = mean(downtime[year == max(year)], na.rm = TRUE)
+  ) %>%
+  mutate(difference = avg_downtime_last - avg_downtime_first)
 
-# Visualize which continent  has the most consistent downtime using variance
-ggplot(state_variance, aes(x = reorder(continent , downtime_variance), y = downtime_variance, fill = continent )) +
-  geom_bar(stat = "identity") +
-  labs(title = "Downtime Consistency by Region (Variance)", x = "continent ", y = "Variance of Downtime") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-# RQ 2
-# Group data by 'year' and 'continent ' and calculate the total downtime for each year and continent 
-total_downtime_per_year_state <- data %>%
-  filter(!is.na(continent )) %>%
-  group_by(year, continent ) %>%
-  summarise(total_downtime = sum(downtime, na.rm = TRUE)) %>%
-  arrange(year, continent )
-
-
-# Create a heatmap to visualize the total downtime per state over the years
-ggplot(total_downtime_per_year_state, aes(x = year, y = continent , fill = total_downtime)) +
-  geom_tile() +
-  scale_fill_gradient(low = "white", high = "red") +  # Set color gradient for heatmap
+# Step 2: Create a bar plot to visualize the difference in average downtime
+ggplot(result, aes(x = continent, y = difference, fill = continent)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
   labs(
-    title = "Total Downtime per State Over the Years",
-    x = "Year",
-    y = "State",
-    fill = "Total Downtime"
+    title = "Difference in Average Downtime Between First and Last Years",
+    x = "Continent",
+    y = "Downtime Difference (Last Year - First Year)"
   ) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
-
-# Aggregate total downtime by state
-state_downtime <- data %>%
-  filter(!is.na(continent) & !is.na(downtime)) %>%
-  group_by(continent) %>%
-  summarise(total_downtime = sum(downtime, na.rm = TRUE), .groups = 'drop') %>%
-  arrange(desc(total_downtime))
-
-# Plot the top 10 states with highest downtime
-ggplot(state_downtime, aes(x = reorder(continent, total_downtime), y = total_downtime, fill = total_downtime)) +
-  geom_bar(stat = "identity", width = 0.7) +
-  coord_flip() +  # Flip for better readability
-  scale_fill_gradient(low = "blue", high = "red") +  # Color gradient
-  labs(title = "Total System Downtime by State",
-       x = "State",
-       y = "Total Downtime (hours)",
-       fill = "Total Downtime") +
-  theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# RQ 4
-# Summarize the data: calculate average downtime by continent and year
-avg_downtime_trends <- data %>%
-  filter(!is.na(continent )) %>%
-  group_by(continent, year) %>%
-  summarise(avg_downtime = mean(downtime, na.rm = TRUE)) %>%
-  arrange(continent, year)
+############
+### RQ 2 ###
+############
+#' Goh Xin Tong - TP069712
+#' RQ 2
+#' Do certain years show a more significant increase in downtime incidents across continents?
 
-# Visualization of the trends using faceting
-ggplot(avg_downtime_trends, aes(x = year, y = avg_downtime)) +
-  geom_line(aes(color = continent)) +
-  geom_point(aes(color = continent)) +
-  facet_wrap(~ continent, scales = "free_y") +  # Facet by continent
-  labs(title = "Trends in Average Downtime by Continent and Year",
-       x = "Year",
-       y = "Average Downtime (hours)") +
+# Step 1: Create a summary table that counts downtime incidents for each continent and year
+downtime_trends <- data %>%
+  count(continent, year)  # Counting incidents per continent-year combination
+
+# Step 2: Create a line plot to show trends in downtime incidents over the years for each continent
+ggplot(downtime_trends, aes(x = year, y = n, color = continent, group = continent)) +
+  geom_line(size = 1) +  # Line plot to show the trend
+  geom_point(size = 3) +  # Add points for each year to make it clearer
+  labs(
+    title = "Trends in Downtime Incidents Over the Years by Continent",
+    x = "Year",
+    y = "Number of Downtime Incidents",
+    color = "Continent"
+  ) +
   theme_minimal() +
-  theme(legend.position = "none")  # Hide legend since it's already facet-based
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
 
-downtime_by_continent_year <- data %>%
-  filter(!is.na(continent )) %>%
+###########################
+# Step 1: Create a summary table that counts downtime incidents for each continent and year
+downtime_summary <- data %>%
+  count(continent, year)  # Counting incidents per continent-year combination
+
+# Step 2: Create a stacked bar chart to show the distribution of downtime incidents across continents and years
+ggplot(downtime_summary, aes(x = year, y = n, fill = continent)) +
+  geom_bar(stat = "identity") +  # Stack bars for each year
+  labs(
+    title = "Distribution of Downtime Incidents Across Years by Continent",
+    x = "Year",
+    y = "Number of Downtime Incidents",
+    fill = "Continent"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+############################
+
+
+############
+### RQ 3 ###
+############
+#' Goh Xin Tong - TP069712
+#' RQ 3
+#' Which continent experienced the highest number of incidents in any specific year?
+
+# Step 1: Calculate the average downtime for each year and continent
+avg_downtime_per_year <- data %>%
   group_by(continent, year) %>%
-  summarise(average_downtime = mean(downtime, na.rm = TRUE))
+  summarize(avg_downtime = mean(downtime, na.rm = TRUE))
 
-# Calculate the change in downtime from the first to the last year for each continent
-downtime_change <- downtime_by_continent_year %>%
+# Step 2: Create the facet line plot with correlation line (regression line)
+ggplot(avg_downtime_per_year, aes(x = year, y = avg_downtime, color = continent)) +
+  geom_line(size = 1.2) +  # Thicker line for better visibility
+  geom_point(size = 3, shape = 21, fill = "white", color = "black") +  # Add points for visibility
+  geom_smooth(method = "lm", aes(group = continent), se = FALSE, linetype = "dashed", size = 1) +  # Linear regression line
+  facet_wrap(~ continent, scales = "free_y") +  # Facet by continent, free y-axis for each continent
+  scale_color_brewer(palette = "Set1") +  # Custom color palette from RColorBrewer
+  labs(
+    title = "Average Downtime Trends with Correlation Line Across Continents and Years",
+    subtitle = "A visualization of the trend in downtime incidents over the years for each continent",
+    x = "Year",
+    y = "Average Downtime",
+    caption = "Source: Your Dataset"
+  ) +
+  theme_minimal(base_size = 15) +  # Minimal theme with larger base font size
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels
+    axis.text = element_text(size = 12),  # Increase font size for axis text
+    axis.title = element_text(size = 14),  # Increase font size for axis titles
+    plot.title = element_text(size = 18, face = "bold"),  # Larger title with bold
+    plot.subtitle = element_text(size = 14, face = "italic"),  # Subtitle in italic
+    plot.caption = element_text(size = 12, color = "gray")  # Smaller caption
+  )
+
+############
+### RQ 4 ###
+############
+#' Goh Xin Tong - TP069712
+#' RQ 4
+#' Which continent experienced the highest number of incidents in any specific year?
+
+# Step 1: Count the number of incidents per year for each continent
+incident_frequency_per_year_continent <- data %>%
+  group_by(continent, year) %>%
+  summarize(incident_count = n(), .groups = "drop")
+
+# Step 2: Calculate the average incident count across all years for each continent
+avg_incidents_continent <- incident_frequency_per_year_continent %>%
   group_by(continent) %>%
-  summarise(first_year_downtime = first(average_downtime),
-            last_year_downtime = last(average_downtime),
-            change_in_downtime = last_year_downtime - first_year_downtime)
+  summarize(avg_incident_count = mean(incident_count, na.rm = TRUE), .groups = "drop")
 
-# Bar Chart for Change in Downtime (First to Last Year)
-ggplot(downtime_change, aes(x = reorder(continent, change_in_downtime), y = change_in_downtime, fill = continent)) +
-  geom_bar(stat = "identity") +
-  labs(title = "Change in Downtime by Continent (First to Last Year)",
-       x = "Continent", y = "Change in Downtime") +
-  coord_flip() +  # Flip to make it horizontal
-  theme_minimal() +
-  theme(legend.position = "none")
+# Step 3: Create the bar plot with the average incident count for each continent
+ggplot(avg_incidents_continent, aes(x = continent, y = avg_incident_count, fill = continent)) +
+  geom_bar(stat = "identity", width = 0.7) +  # Bar plot for average incident count
+  labs(
+    title = "Average Incident Count Across Years by Continent",
+    x = "Continent",
+    y = "Average Incident Count"
+  ) +
+  theme_minimal(base_size = 15) +  # Minimal theme with larger font size
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 
-##############################################################################
+
+###############################################################################
+###############################################################################
+
 
 write.csv(data, "output.csv", row.names = FALSE)
 
