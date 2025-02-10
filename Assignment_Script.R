@@ -7,7 +7,6 @@
 ### Import Necessary Packages ###
 #####################################################################################################
 
-if (!requireNamespace("readxl", quietly = TRUE)) install.packages("readxl")
 if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
 if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
 if (!requireNamespace("DBI", quietly = TRUE)) install.packages("DBI")
@@ -15,13 +14,14 @@ if (!requireNamespace("RSQLite", quietly = TRUE)) install.packages("RSQLite")
 if (!requireNamespace("lubridate", quietly = TRUE)) install.packages("lubridate")
 if (!requireNamespace("reshape2", quietly = TRUE)) install.packages("reshape2")
 if (!requireNamespace("mice", quietly = TRUE)) install.packages("mice")
+if (!requireNamespace("scales", quietly = TRUE)) install.packages("scales")
 if (!requireNamespace("tidyr", quietly = TRUE)) install.packages("tidyr")
+if (!requireNamespace("stringr", quietly = TRUE)) install.packages("stringr")
 if (!requireNamespace("countrycode", quietly = TRUE)) install.packages("countrycode")
 if (!requireNamespace("purrr", quietly = TRUE)) install.packages("purrr")
 if (!requireNamespace("randomForest", quietly = TRUE)) install.packages("randomForest")
 if (!requireNamespace("RColorBrewer", quietly = TRUE)) install.packages("RColorBrewer")
 
-library(readxl)
 library(dplyr)
 library(ggplot2)
 library(DBI)
@@ -155,7 +155,7 @@ data$year <- as.numeric(format(as.Date(data$date), "%Y"))
 table(data$year)
 
 ##########################
-### Data CLeaning - OS ###
+### Data Cleaning - OS ###
 ##########################
 
 # Chech how many OS is NA
