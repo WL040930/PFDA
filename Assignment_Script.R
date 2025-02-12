@@ -78,14 +78,27 @@ data <- cleanInvalidValues(data)
 #' remove duplicated row
 data <- data[!duplicated(data), ]
 
-############################
-### DATA CLEANING - DATE ###
-############################
+################################################################################
+### DATA PREPROSESSING + DATA EXPLORATION + DATA VALIDATION ###
+################################################################################
+
+##########################################################
+### DATE ###
+##########################################################
+
+########################
+### Data Exploration ###
+########################
 
 # check how many column of date is empty
 # No column is empty
 print("Missing Data - Date")
 sum(is.na(data$date)) / nrow(data)
+summary(data$date)
+
+##########################
+### Data Preprocessing ###
+##########################
 
 #' Detect and identify distinct date formats in a given vector
 #' 
@@ -150,17 +163,135 @@ print(detect_date_formats(data$date))
 data$date <- parse_date_time(data$date, orders = c("dmy", "mdy", "ymd", "b d Y"))
 data$year <- as.numeric(format(as.Date(data$date), "%Y"))
 
+#######################
+### Data Validation ###
+#######################
+
+data$year <- as.integer(data$year)
+
+
 # check the cleaned data
 table(data$year)
 
+
+
+##########################################################
+### Data Attribute - IP ###
+##########################################################
+
+########################
+### Data Exploration ###
+########################
+
+# Calculate the percentage of missing values in the IP column
+missing_percentage <- sum(is.na(data$ip)) / nrow(data) * 100
+cat("Percentage of missing data in IP column:", missing_percentage, "%\n") # 13.9 %
+
+# Filter out rows where 'ip' is NA and view the first few rows
+filtered_data <- data %>% filter(!is.na(ip))
+
+# View the first few IPs after filtering
+head(filtered_data$ip)
+
+# By viewing the first few rows of the ip, we know that 
+# the ip is in format eg 192.168.1.1 
+
+
 ##########################
-### Data Cleaning - OS ###
+### Data Preprocessing ###
 ##########################
+
+#' Classify IP Address into Network Class
+#'
+#' This function takes an IPv4 address and classifies it into one of the following 
+#' network classes: Class A, Class B, Class C, Class D (Multicast), or Class E (Reserved).
+#'
+#' @param ip A character string representing an IPv4 address (e.g., "192.168.1.1").
+#' 
+#' @return A character string indicating the class of the provided IP address. 
+#' Possible return values are:
+#' \itemize{
+#'   \item Class A
+#'   \item Class B
+#'   \item Class C
+#'   \item Class D (Multicast)
+#'   \item Class E (Reserved)
+#'   \item Invalid IP (if the input is not a valid IPv4 address).
+#' }
+#' 
+#' @examples
+#' classify_ip("192.168.1.1")  # Returns "Class C"
+#' classify_ip("10.0.0.1")     # Returns "Class A"
+#' classify_ip("256.256.256.256")  # Returns "Invalid IP"
+#' 
+#' @export
+classify_ip <- function(ip) {
+  if (is.na(ip)) {
+    return(NA)  # Return NA if the IP is missing
+  }
+  # Split the IP into its octets
+  octets <- as.numeric(strsplit(ip, "\\.")[[1]])
+  
+  # Classify based on the first octet
+  if (octets[1] >= 1 & octets[1] <= 127) {
+    return("Class A")
+  } else if (octets[1] >= 128 & octets[1] <= 191) {
+    return("Class B")
+  } else if (octets[1] >= 192 & octets[1] <= 223) {
+    return("Class C")
+  } else if (octets[1] >= 224 & octets[1] <= 239) {
+    return("Class D (Multicast)")
+  } else if (octets[1] >= 240 & octets[1] <= 255) {
+    return("Class E (Reserved)")
+  } else {
+    return("Invalid IP")
+  }
+}
+
+# Apply the classify_ip function to the 'ip' column and create 'ip_class' column
+data$ip_class <- sapply(data$ip, classify_ip)
+
+table(data$ip_class)
+
+#######################
+### Data Validation ###
+#######################
+
+# Count the number of valid vs invalid IP addresses
+valid_ips <- sum(data$ip_class != "Invalid IP" & !is.na(data$ip_class))
+invalid_ips <- sum(data$ip_class == "Invalid IP" | is.na(data$ip_class))
+
+# Visualize the validation results (valid vs invalid IPs)
+validation_data <- data.frame(
+  IP_Validation = c("Valid IP", "Invalid IP"),
+  Count = c(valid_ips, invalid_ips)
+)
+
+ggplot(validation_data, aes(x = IP_Validation, y = Count, fill = IP_Validation)) +
+  geom_bar(stat = "identity", color = "black") +
+  ggtitle("Valid vs Invalid IP Addresses") +
+  xlab("IP Validation Status") +
+  ylab("Count") +
+  theme_minimal()
+
+
+
+##########################################################
+### Data Attribute - OS ###
+##########################################################
+
+########################
+### Data Exploration ###
+########################
 
 # Chech how many OS is NA
 # Since only 0.046 of data is missing, therefore, it is safe to just disable it
 print("Missing data - OS")
 sum(is.na(data$os)) / nrow(data)
+
+##########################
+### Data Preprocessing ###
+##########################
 
 #' Group OS into Category 
 #' 
@@ -193,9 +324,43 @@ data <- categorize_os(data)
 # Check the cleaned data
 table(data$os_category)
 
-##################################
-### DATA CLEANING - Web Server ###
-##################################
+#######################
+### Data Validation ###
+#######################
+
+# Ensure that the 'os_category' column is a factor
+data$os_category <- as.factor(data$os_category)
+
+# Count the number of different OS categories and inspect
+os_category_count <- table(data$os_category)
+cat("OS Category Validation:\n")
+print(os_category_count)
+
+# Visualize the OS categories in a bar chart
+ggplot(data, aes(x = os_category)) +
+  geom_bar(fill = "skyblue", color = "black") +
+  ggtitle("Distribution of OS Categories") +
+  xlab("OS Category") +
+  ylab("Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+##########################################################
+### Data Attribute - Web Server ###
+##########################################################
+
+########################
+### Data Exploration ###
+########################
+
+# Chech how many data is NA
+print("Missing data - Web Server")
+sum(is.na(data$webserver)) / nrow(data) # 27.76%
+
+##########################
+### Data Preprocessing ###
+##########################
 
 #' Clean and Standardize Web Server Names
 #'
@@ -237,15 +402,43 @@ data <- data %>%
 # Check the distribution of the cleaned webserver data
 table(data$webserver_cleaned)
 
+#######################
+### Data Validation ###
+#######################
 
-###############################
-### DATA CLEANING - Country ###
-###############################
+data$webserver_cleaned <- as.factor(data$webserver_cleaned)
 
+# Count the number of different web server categories and inspect
+webserver_category_count <- table(data$webserver_cleaned)
+cat("Web Server Category Validation:\n")
+print(webserver_category_count)
+
+# Visualize the cleaned web server data
+ggplot(data, aes(x = webserver_cleaned)) +
+  geom_bar(fill = "lightgreen", color = "black") +
+  ggtitle("Distribution of Web Server Categories") +
+  xlab("Web Server Category") +
+  ylab("Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+
+##########################################################
+### Data Attribute - Country ###
+##########################################################
+
+########################
+### Data Exploration ###
+########################
 # check how many row of contry is NA 
 # 0.3175 data is missing 
 print("Missing Data - Country")
 sum(is.na(data$country)) / nrow(data)
+
+##########################
+### Data Preprocessing ###
+##########################
 
 #' Standardize country names
 #'
@@ -285,38 +478,27 @@ table(data$country_cleaned)
 #' machine learning to learn the pattern and fill in the data 
 sum(is.na(data$country_cleaned)) / count(data)
 
-# --------------------------------------------------------------------------------
 # Step 1: Convert categorical variables to factors
-# --------------------------------------------------------------------------------
-
 data$os_category <- as.factor(data$os_category)
 data$country_cleaned <- as.factor(data$country_cleaned)
 
-# --------------------------------------------------------------------------------
 # Step 2: Create a continent column from country_cleaned using countrycode
 #         For rows with a known country, countrycode returns the corresponding continent.
-# --------------------------------------------------------------------------------
-
 data$continent <- countrycode(data$country_cleaned,
                               origin = "country.name",
                               destination = "continent")
 table(data$continent)
-
 data$continent <- as.factor(data$continent)
 
-# --------------------------------------------------------------------------------
+
 # Step 3: Split the data into training (rows with known continent) and 
 #         testing (rows with missing continent) datasets.
-# --------------------------------------------------------------------------------
-
 train_data <- data %>% filter(!is.na(continent))
 test_data <- data %>% filter(is.na(continent))
 
-# --------------------------------------------------------------------------------
+
 # Step 4: Train a Random Forest model to predict the missing continent values.
 #         Since continent is now a factor, Random Forest will perform classification.
-# --------------------------------------------------------------------------------
-
 if (nrow(test_data) > 0) {
   model <- randomForest(continent ~ downtime + year + os_category,
                         data = train_data,
@@ -332,9 +514,45 @@ if (nrow(test_data) > 0) {
 
 table(data$continent)
 
-################################
-### DATA CLEANING - Encoding ###
-################################
+#######################
+### Data Validation ###
+#######################
+
+data$continent <- as.factor(data$continent)
+
+# Visualize the distribution of countries
+ggplot(data, aes(x = country_cleaned)) +
+  geom_bar(fill = "lightblue", color = "black") +
+  ggtitle("Distribution of Countries") +
+  xlab("Country") +
+  ylab("Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Visualize the distribution of continents
+ggplot(data, aes(x = continent)) +
+  geom_bar(fill = "lightcoral", color = "black") +
+  ggtitle("Distribution of Continents") +
+  xlab("Continent") +
+  ylab("Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+
+##########################################################
+### Data Attribute - Encoding ###
+##########################################################
+
+########################
+### Data Exploration ###
+########################
+
+# 58.97% data is missing
+sum(is.na(data$encoding)) / nrow(data)
+
+##########################
+### Data Preprocessing ###
+##########################
 
 data <- data %>%
   mutate(encoding_group = case_when(
@@ -374,42 +592,35 @@ if (nrow(test_data_encoding) > 0) {
 # Check the result
 table(data$encoding_group)
 
-
-
-#####################################################################################################
+#######################
 ### Data Validation ###
-#####################################################################################################
+#######################
 
-#############################
-### Missing Data Handling ###
-#############################
+# ensure the encoding is factor 
+data$encoding_group <- as.factor(data$encoding_group)
 
-# Check missing values
-missing_summary_percentage <- data %>%
-  summarise(
-    missing_year = sum(is.na(year)) / n() * 100,
-    missing_os_category = sum(is.na(os_category)) / n() * 100,
-    missing_continent = sum(is.na(continent)) / n() * 100,
-    missing_downtime = sum(is.na(downtime)) / n() * 100
-  )
 
-print(missing_summary_percentage)
+##########################################################
+### Data Attribute - Downtime ###
+##########################################################
 
-##############################
-### Duplicate Data Removal ###
-##############################
+########################
+### Data Exploration ###
+########################
 
-# Check for duplicate rows
-duplicate_rows <- data[duplicated(data), ]
-print(paste("Number of duplicate rows:", nrow(duplicate_rows)))
+# check how many row is empty 
+sum(is.na(data$downtime)) / nrow(data)
+# no row is empty 
 
-if (nrow(duplicate_rows) > 0) {
-  data <- data[!duplicated(data), ]
-}
+boxplot(data$downtime, 
+        main = "Box Plot of Downtime",
+        ylab = "Downtime",
+        col = "lightblue",
+        border = "blue")
 
-###########################
-### Logical Range Check ###
-###########################
+##########################
+### Data Preprocessing ###
+##########################
 
 # remove if downtime is less than 0
 invalid_downtime <- data %>% filter(downtime < 0)
@@ -435,13 +646,10 @@ print(data_no_outliers)
 cat("Number of rows removed: ", nrow(data) - nrow(data_no_outliers))
 # No outlier in downtime, so nothing need to be removed. 
 
-############################
-### Data Type Validation ###
-############################
+#######################
+### Data Validation ###
+#######################
 
-data$year <- as.integer(data$year)
-data$os_category <- as.factor(data$os_category)
-data$continent <- as.factor(data$continent)
 data$downtime <- as.numeric(data$downtime)
 
 
@@ -638,31 +846,37 @@ ggplot(downtime_diff_sorted, aes(x = reorder(os_category, downtime_change), y = 
 ############
 #' LIM WEI LUN - TP069058
 #' RQ 5
-#' Which OS category had the shortest recovery time?
+#' Are there years in which downtime incidents show a substantial rise when categorized by OS type?
 
-# Step 1: Count occurrences per OS category
-os_downtime_summary <- data %>%
-  group_by(os_category) %>%
-  summarise(
-    total_downtime = sum(downtime, na.rm = TRUE), # Sum total downtime
-    occurrences = n(),  # Count occurrences
-    avg_downtime_per_occurrence = total_downtime / occurrences  # Calculate average downtime per incident
-  ) %>%
-  arrange(avg_downtime_per_occurrence)  # Sort by lowest downtime
+# Step 1: Create a summary table to count the number of downtime incidents by OS category and year
+downtime_frequency <- data %>%
+  group_by(year, os_category) %>%
+  tally(name = "incident_count")  # Count incidents per year and OS category
 
-# Step 2: Visualize with a bar chart including value labels
-ggplot(os_downtime_summary, aes(x = reorder(os_category, avg_downtime_per_occurrence), 
-                                y = avg_downtime_per_occurrence, fill = os_category)) +
-  geom_bar(stat = "identity") +
-  geom_text(aes(label = round(avg_downtime_per_occurrence, 2)),  # Add labels with 2 decimal places
-            hjust = -0.2, size = 4) +  # Adjust text position and size
-  coord_flip() +  # Flip for readability
-  labs(title = "Average Downtime per Occurrence by OS Category",
-       x = "OS Category",
-       y = "Average Downtime (Days)") +
+# Step 2: Create a bar plot to compare downtime incident frequencies across OS categories for each year
+ggplot(downtime_frequency, aes(x = year, y = incident_count, fill = os_category)) +
+  geom_bar(stat = "identity", position = "stack") +  # Stacked bar plot
+  labs(
+    title = "Total Downtime Incident Frequency by OS Category and Year",
+    x = "Year",
+    y = "Frequency of Downtime Incidents",
+    fill = "OS Category"
+  ) +
   theme_minimal() +
-  theme(legend.position = "none")  # Hide legend since colors are categorical
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 
+# Extra Feature 1 
+ggplot(downtime_frequency, aes(x = year, y = os_category, fill = incident_count)) +
+  geom_tile() +  # Heatmap tiles based on incident count
+  scale_fill_gradient(low = "lightblue", high = "darkred", na.value = "white") +  # Adjusted color gradient
+  labs(
+    title = "Heatmap of Downtime Incidents by OS Category and Year",
+    x = "Year",
+    y = "OS Category",
+    fill = "Incident Count"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 
 
 ###############################################################################
