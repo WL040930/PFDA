@@ -332,6 +332,50 @@ if (nrow(test_data) > 0) {
 
 table(data$continent)
 
+################################
+### DATA CLEANING - Encoding ###
+################################
+
+data <- data %>%
+  mutate(encoding_group = case_when(
+    grepl("utf", encoding, ignore.case = TRUE) ~ "UTF",
+    grepl("windows", encoding, ignore.case = TRUE) ~ "Windows",
+    grepl("iso", encoding, ignore.case = TRUE) ~ "ISO",
+    grepl("big5", encoding, ignore.case = TRUE) ~ "Big5",
+    grepl("euc", encoding, ignore.case = TRUE) ~ "EUC",
+    grepl("ascii", encoding, ignore.case = TRUE) ~ "ASCII",
+  ))
+
+sum(is.na(data$encoding_group)) / count(data)
+
+table(data$encoding_group)
+
+# Step 1: Convert encoding_group to factor
+data$encoding_group <- as.factor(data$encoding_group)
+
+# Step 2: Split the data into training (with known encoding_group) and testing (with missing encoding_group)
+train_data_encoding <- data %>% filter(!is.na(encoding_group))
+test_data_encoding <- data %>% filter(is.na(encoding_group))
+
+# Step 3: Train a Random Forest model to predict the missing encoding_group values
+if (nrow(test_data_encoding) > 0) {
+  model_encoding <- randomForest(encoding_group ~ downtime + year + os_category + continent, 
+                                 data = train_data_encoding,
+                                 ntree = 100,
+                                 importance = TRUE)
+  
+  # Predict encoding_group for rows with missing encoding_group
+  test_data_encoding$encoding_group <- predict(model_encoding, test_data_encoding)
+  
+  # Replace the missing encoding_group values in the original dataset with the predictions
+  data$encoding_group[is.na(data$encoding_group)] <- test_data_encoding$encoding_group
+}
+
+# Check the result
+table(data$encoding_group)
+
+
+
 #####################################################################################################
 ### Data Validation ###
 #####################################################################################################
