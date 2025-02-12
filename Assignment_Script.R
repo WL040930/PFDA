@@ -75,7 +75,6 @@ cleanInvalidValues <- function(data) {
 }
 data <- cleanInvalidValues(data)
 
-
 #' remove duplicated row
 data <- data[!duplicated(data), ]
 
@@ -333,16 +332,88 @@ if (nrow(test_data) > 0) {
 
 table(data$continent)
 
+################################
+### DATA CLEANING - Encoding ###
+################################
+
+data <- data %>%
+  mutate(encoding_group = case_when(
+    grepl("utf", encoding, ignore.case = TRUE) ~ "UTF",
+    grepl("windows", encoding, ignore.case = TRUE) ~ "Windows",
+    grepl("iso", encoding, ignore.case = TRUE) ~ "ISO",
+    grepl("big5", encoding, ignore.case = TRUE) ~ "Big5",
+    grepl("euc", encoding, ignore.case = TRUE) ~ "EUC",
+    grepl("ascii", encoding, ignore.case = TRUE) ~ "ASCII",
+  ))
+
+sum(is.na(data$encoding_group)) / count(data)
+
+table(data$encoding_group)
+
+# Step 1: Convert encoding_group to factor
+data$encoding_group <- as.factor(data$encoding_group)
+
+# Step 2: Split the data into training (with known encoding_group) and testing (with missing encoding_group)
+train_data_encoding <- data %>% filter(!is.na(encoding_group))
+test_data_encoding <- data %>% filter(is.na(encoding_group))
+
+# Step 3: Train a Random Forest model to predict the missing encoding_group values
+if (nrow(test_data_encoding) > 0) {
+  model_encoding <- randomForest(encoding_group ~ downtime + year + os_category + continent, 
+                                 data = train_data_encoding,
+                                 ntree = 100,
+                                 importance = TRUE)
+  
+  # Predict encoding_group for rows with missing encoding_group
+  test_data_encoding$encoding_group <- predict(model_encoding, test_data_encoding)
+  
+  # Replace the missing encoding_group values in the original dataset with the predictions
+  data$encoding_group[is.na(data$encoding_group)] <- test_data_encoding$encoding_group
+}
+
+# Check the result
+table(data$encoding_group)
+
+
+
 #####################################################################################################
 ### Data Validation ###
 #####################################################################################################
 
-################
-### Downtime ###
-################
+#############################
+### Missing Data Handling ###
+#############################
 
-# ensure downtime is numeric 
-data$downtime <- as.numeric(data$downtime)
+# Check missing values
+missing_summary_percentage <- data %>%
+  summarise(
+    missing_year = sum(is.na(year)) / n() * 100,
+    missing_os_category = sum(is.na(os_category)) / n() * 100,
+    missing_continent = sum(is.na(continent)) / n() * 100,
+    missing_downtime = sum(is.na(downtime)) / n() * 100
+  )
+
+print(missing_summary_percentage)
+
+##############################
+### Duplicate Data Removal ###
+##############################
+
+# Check for duplicate rows
+duplicate_rows <- data[duplicated(data), ]
+print(paste("Number of duplicate rows:", nrow(duplicate_rows)))
+
+if (nrow(duplicate_rows) > 0) {
+  data <- data[!duplicated(data), ]
+}
+
+###########################
+### Logical Range Check ###
+###########################
+
+# remove if downtime is less than 0
+invalid_downtime <- data %>% filter(downtime < 0)
+print(paste("Number of negative downtime values:", nrow(invalid_downtime)))
 
 # remove all the outlier in downtime
 # Calculate the IQR for downtime
@@ -364,9 +435,14 @@ print(data_no_outliers)
 cat("Number of rows removed: ", nrow(data) - nrow(data_no_outliers))
 # No outlier in downtime, so nothing need to be removed. 
 
+############################
+### Data Type Validation ###
+############################
 
-
-
+data$year <- as.integer(data$year)
+data$os_category <- as.factor(data$os_category)
+data$continent <- as.factor(data$continent)
+data$downtime <- as.numeric(data$downtime)
 
 
 
@@ -731,6 +807,42 @@ ggplot(avg_incidents_continent, aes(x = continent, y = avg_incident_count, fill 
   ) +
   theme_minimal(base_size = 15) +  # Minimal theme with larger font size
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+############
+### RQ 5 ###
+############
+#' Goh Xin Tong - TP069712
+#' RQ 5
+#' Which continent consistently experiences the lowest system downtime across multiple years?
+
+# Step 1: Identify which continent has the lowest average downtime each year
+min_downtime_per_year <- avg_data %>%
+  group_by(year) %>%
+  slice(which.min(avg_downtime)) %>%
+  ungroup()  # Select the continent with the lowest downtime for each year
+
+# Step 2: Count how many times each continent had the lowest downtime
+continent_min_count <- min_downtime_per_year %>%
+  count(continent) %>%
+  rename(min_count = n)
+
+# Step 3: Create the pie chart with labels
+ggplot(continent_min_count, aes(x = "", y = min_count, fill = continent)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +  # Convert to pie chart
+  labs(title = "Distribution of Years with Lowest Downtime by Continent") +
+  theme_void() +  # Removes axis labels and ticks
+  theme(legend.title = element_blank()) +  # Removes legend title
+  geom_text(aes(label = paste(continent, "(", min_count, ")", sep = "")), 
+            position = position_stack(vjust = 0.5), 
+            color = "white", size = 5)  # Add labels in white color
+
+
+
+# View the result
+print(continent_max_count)
+
+
 
 
 ###############################################################################
