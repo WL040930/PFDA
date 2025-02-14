@@ -1084,7 +1084,162 @@ ggplot(continent_min_count, aes(x = "", y = min_count, fill = continent)) +
 print(continent_max_count)
 
 
+###############################################################################
+###############################################################################
 
+
+###############################################################################
+###############################################################################
+
+################################
+### LEE JUN ZHE ### TP065879 ###
+################################
+###########
+### RQ1 ###
+###########
+
+### Do different types of encoding formats affect downtime? ###
+### step 1 : check the unique value of encoding to ensure that the data format is correct ###
+unique(data$encoding)
+
+### step 2 : Calculate the average downtime of different encodings ###
+encoding_downtime <- data %>%
+  group_by(encoding) %>%
+  summarise(mean_downtime = mean(downtime, na.rm = TRUE),
+            median_downtime = median(downtime, na.rm = TRUE),
+            sd_downtime = sd(downtime, na.rm = TRUE),
+            count = n()) %>%
+  arrange(desc(mean_downtime))
+
+print(encoding_downtime)
+
+### step 3 : Obsolete/unsupported encoding format ###
+legacy_encodings <- c("ISO-8859-15", "Big5", "windows-874", "GB2312", 
+                      "windows-1253", "TIS-620", "windows-1255", "Big5-HKSCS")
+data <- data %>%
+  mutate(encoding_category = ifelse(encoding %in% legacy_encodings, "Legacy", "Modern"))
+
+### step 4 : Calculate the average downtime of two types of encoding ###
+legacy_analysis <- data %>%
+  group_by(encoding_category) %>%
+  summarise(mean_downtime = mean(downtime, na.rm = TRUE),
+            median_downtime = median(downtime, na.rm = TRUE),
+            sd_downtime = sd(downtime, na.rm = TRUE),
+            count = n())
+
+print(legacy_analysis)
+
+### step 5: Statistical test to determine whether there is a significant difference ### 
+wilcox_test <- wilcox.test(downtime ~ encoding_category, data = data)
+print(wilcox_test)
+
+### step 6 : Visual comparison of downtime between Legacy and Modern encodings ###
+
+ggplot(data, aes(x = encoding_category, y = downtime, fill = encoding_category)) +
+  geom_boxplot() +
+  labs(title = "Obsolete Code vs Modern Coding Downtime comparison",
+       x = "Coding category",
+       y = "downtime") +
+  theme_minimal()
+
+#############
+### RQ 2 ####
+#############
+
+### What is the average downtime for each encoding format? ###
+### step 1 : Take the top 10 codes with the highest downtime ###
+top_encodings <- data %>%
+  group_by(encoding) %>%
+  summarise(mean_downtime = mean(downtime, na.rm = TRUE)) %>%
+  arrange(desc(mean_downtime)) %>%
+  top_n(10, mean_downtime)  
+
+### step 2 : Bar Chart Visualization ###
+ggplot(top_encodings, aes(x = reorder(encoding, -mean_downtime), y = mean_downtime, fill = encoding)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Top 10 codes with the most downtime",
+       x = "Encoding",
+       y = "Average downtime (downtime)")
+
+#############
+### RQ 3 ####
+#############
+
+### Is there a significant relationship between encoding types and average downtime for different web servers?  ###
+### step 1 : Filter out N and NA ###
+data_filtered <- data %>%
+  filter(!is.na(webserver) & webserver != "N",
+         !is.na(encoding) & encoding != "N")
+
+### step 2 : Calculate the frequency of each encoding and keep the top 10  ###
+############ Calculate the frequency of each web server and keep the top 4 ###
+top_encoding <- data_filtered %>%
+  count(encoding) %>%
+  top_n(10, n) %>%
+  pull(encoding)
+
+top_webservers <- data_filtered %>%
+  count(webserver) %>%
+  top_n(4, n) %>%
+  pull(webserver)
+
+### step 3 :  Filtering Data ###
+data_filtered <- data_filtered %>%
+  filter(encoding %in% top_encoding)
+data_filtered <- data_filtered %>%
+  filter(webserver %in% top_webservers)
+
+### step 4 : Drawing heatmap ###
+ggplot(data_filtered, aes(x = webserver, y = encoding, fill = downtime)) +
+  geom_tile() +
+  scale_fill_gradient(low = "blue", high = "red") +
+  labs(title = "Average Downtime for Top 4 Web Servers and Encoding Types",
+       x = "Web Server",
+       y = "Encoding",
+       fill = "Avg Downtime") +
+  theme_minimal()
+
+#############
+### RQ 4 ###
+############
+
+### Is there a difference in downtime between different encoding formats over time? ###
+### step 1 : Calculate downtime for different years ###
+data_summary <- data %>%
+  group_by(year, encoding_category) %>%
+  summarise(mean_downtime = mean(downtime, na.rm = TRUE),
+            count = n())
+
+### step 2 : Downtime of different encoding formats over time (line graph) ###
+ggplot(data_summary, aes(x = year, y = mean_downtime, color = encoding_category, group = encoding_category)) +
+  geom_line(size = 1.2) +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "Downtime changes over time for different encoding formats",
+       x = "Years",
+       y = "Average downtime",
+       color = "Encoding Type")
+
+############
+### RQ 5 ###
+############
+
+### Determine the difference in downtime between legacy and modern code on an OS? ###
+### step 1 : Calculate the average downtime for different OS & Encoding categories ###
+data_summary <- data %>%
+  group_by(os_category, encoding_category) %>%
+  summarise(mean_downtime = mean(downtime, na.rm = TRUE))
+
+### step 2 : Plotting a heat map ###
+ggplot(data_summary, aes(x = encoding_category, y = os_category, fill = mean_downtime)) +
+  geom_tile() +
+  scale_fill_gradient(low = "blue", high = "red") +
+  theme_minimal() +
+  labs(title = "Average downtime by OS & encoding",
+       x = "Encoding format",
+       y = "Operating system",
+       fill = "Average downtime")
 
 ###############################################################################
 ###############################################################################
