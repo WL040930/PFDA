@@ -21,6 +21,7 @@ if (!requireNamespace("countrycode", quietly = TRUE)) install.packages("countryc
 if (!requireNamespace("purrr", quietly = TRUE)) install.packages("purrr")
 if (!requireNamespace("randomForest", quietly = TRUE)) install.packages("randomForest")
 if (!requireNamespace("RColorBrewer", quietly = TRUE)) install.packages("RColorBrewer")
+if (!requireNamespace("stringdist", quietly = TRUE)) install.packages("stringdist")
 
 library(dplyr)
 library(ggplot2)
@@ -36,6 +37,7 @@ library(countrycode)
 library(purrr)
 library(randomForest)
 library(RColorBrewer)
+library(stringdist)
 
 
 ################################################################################
@@ -403,6 +405,31 @@ data <- data %>%
 table(data$webserver_cleaned)
 
 #######################
+### Predict Missing WebServer ###
+#######################
+
+# Convert categorical variables to factors
+data$webserver_cleaned <- as.factor(data$webserver_cleaned)
+data$os_category <- as.factor(data$os_category)
+data$encoding_group <- as.factor(data$encoding_group)
+
+# Separate Data into Training & Testing Sets
+train_data <- data %>% filter(!is.na(webserver_cleaned))
+test_data <- data %>% filter(is.na(webserver_cleaned))
+
+# Train a Random Forest model to predict WebServer category
+if (nrow(test_data) > 0) {
+  model_webserver <- randomForest(webserver_cleaned ~ os_category + year + encoding_group + downtime,
+                                  data = train_data, ntree = 100, importance = TRUE)
+  
+  # Predict missing WebServer values
+  test_data$webserver_cleaned <- predict(model_webserver, test_data)
+  
+  # Update the dataset with predicted values
+  data$webserver_cleaned[is.na(data$webserver_cleaned)] <- test_data$webserver_cleaned
+}
+
+#######################
 ### Data Validation ###
 #######################
 
@@ -416,7 +443,7 @@ print(webserver_category_count)
 # Visualize the cleaned web server data
 ggplot(data, aes(x = webserver_cleaned)) +
   geom_bar(fill = "lightgreen", color = "black") +
-  ggtitle("Distribution of Web Server Categories") +
+  ggtitle("Final Distribution of Web Server Categories After Prediction") +
   xlab("Web Server Category") +
   ylab("Count") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
