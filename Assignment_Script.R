@@ -22,6 +22,7 @@ if (!requireNamespace("purrr", quietly = TRUE)) install.packages("purrr")
 if (!requireNamespace("randomForest", quietly = TRUE)) install.packages("randomForest")
 if (!requireNamespace("RColorBrewer", quietly = TRUE)) install.packages("RColorBrewer")
 if (!requireNamespace("stringdist", quietly = TRUE)) install.packages("stringdist")
+if (!requireNamespace("caret", quietly = TRUE)) install.packages("caret")
 
 library(dplyr)
 library(ggplot2)
@@ -38,7 +39,7 @@ library(purrr)
 library(randomForest)
 library(RColorBrewer)
 library(stringdist)
-
+library(caret)
 
 ################################################################################
 ### DATA IMPORT ###
@@ -541,6 +542,15 @@ if (nrow(test_data) > 0) {
 
 table(data$continent)
 
+# Step 5: Validate the model performance
+if (nrow(test_data) > 0 && !all(is.na(test_data$continent))) {
+  predicted_continents <- predict(model, test_data)
+  
+  # Confusion Matrix for validation (Only if true continent values exist for test_data)
+  confusion_result <- confusionMatrix(predicted_continents, test_data$continent)
+  print(confusion_result)
+}
+
 #######################
 ### Data Validation ###
 #######################
@@ -873,38 +883,28 @@ ggplot(downtime_diff_sorted, aes(x = reorder(os_category, downtime_change), y = 
 ############
 #' LIM WEI LUN - TP069058
 #' RQ 5
-#' Are there years in which downtime incidents show a substantial rise when categorized by OS type?
+#' How has the proportion of downtime attributed to different OS categories changed over the years?
 
-# Step 1: Create a summary table to count the number of downtime incidents by OS category and year
-downtime_frequency <- data %>%
+loss_proportion <- data %>%
   group_by(year, os_category) %>%
-  tally(name = "incident_count")  # Count incidents per year and OS category
+  summarise(
+    Total_Loss = sum(downtime)
+  ) %>%
+  mutate(
+    Proportion = Total_Loss / sum(Total_Loss)
+  )  # Calculate proportion for each OS category
 
-# Step 2: Create a bar plot to compare downtime incident frequencies across OS categories for each year
-ggplot(downtime_frequency, aes(x = year, y = incident_count, fill = os_category)) +
-  geom_bar(stat = "identity", position = "stack") +  # Stacked bar plot
+#Stacked Bar to check the proportion for each OS category
+ggplot(loss_proportion, aes(x = year, y = Proportion, fill = os_category)) +
+  geom_bar(stat = "identity", position = "fill") +  
+  scale_y_continuous(labels = scales::percent) +                #Convert the scale into proportion for frequency
   labs(
-    title = "Total Downtime Incident Frequency by OS Category and Year",
-    x = "Year",
-    y = "Frequency of Downtime Incidents",
-    fill = "OS Category"
+    title = "Proportion of Downtime by OS Category Over Years",
+    x = "Year", 
+    y = "Total Loss"
   ) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
-
-# Extra Feature 1 
-ggplot(downtime_frequency, aes(x = year, y = os_category, fill = incident_count)) +
-  geom_tile() +  # Heatmap tiles based on incident count
-  scale_fill_gradient(low = "lightblue", high = "darkred", na.value = "white") +  # Adjusted color gradient
-  labs(
-    title = "Heatmap of Downtime Incidents by OS Category and Year",
-    x = "Year",
-    y = "OS Category",
-    fill = "Incident Count"
-  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
-
+  theme(plot.title = element_text(hjust = 0.5))
 
 ###############################################################################
 ###############################################################################
