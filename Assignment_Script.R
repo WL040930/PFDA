@@ -41,6 +41,7 @@ library(RColorBrewer)
 library(stringdist)
 library(caret)
 
+
 ################################################################################
 ### DATA IMPORT ###
 ################################################################################
@@ -348,110 +349,6 @@ ggplot(data, aes(x = os_category)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
-
-##########################################################
-### Data Attribute - Web Server ###
-##########################################################
-
-########################
-### Data Exploration ###
-########################
-
-# Chech how many data is NA
-print("Missing data - Web Server")
-sum(is.na(data$webserver)) / nrow(data) # 27.76%
-
-##########################
-### Data Preprocessing ###
-##########################
-
-#' Clean and Standardize Web Server Names
-#'
-#' This function takes in a vector of web server names (including versions or additional information) 
-#' and standardizes them by removing extra details and grouping similar servers under a common name.
-#'
-#' @param webserver Character vector: A vector of web server names, which may include versions and other extra information.
-#' 
-#' @return Character vector: A vector of standardized web server names, where each entry is grouped under a common category 
-#' like "IIS", "nginx", "Apache", etc. If no match is found, the function returns `NA` for that entry.
-#'
-clean_webserver <- function(webserver) {
-  # Remove versions and extra information after '/'
-  cleaned <- str_replace_all(webserver, "\\/.*", "")  # Remove everything after '/'
-  
-  # Standardize common web servers by grouping them into broader categories
-  cleaned <- case_when(
-    str_detect(cleaned, "IIS") ~ "IIS",
-    str_detect(cleaned, "nginx") ~ "nginx",
-    str_detect(cleaned, "Apache") ~ "Apache",
-    str_detect(cleaned, "lighttpd") ~ "lighttpd",
-    str_detect(cleaned, "Zeus") ~ "Zeus",
-    str_detect(cleaned, "Tomahawk") ~ "Tomahawk",
-    str_detect(cleaned, "Oracle") ~ "Oracle",
-    str_detect(cleaned, "Sun") ~ "Sun",
-    str_detect(cleaned, "Microsoft") ~ "Microsoft",
-    str_detect(cleaned, "Squid") ~ "Squid",
-    str_detect(cleaned, "Varnish") ~ "Varnish",
-    TRUE ~ NA
-  )
-  
-  return(cleaned)  # Return the cleaned and standardized web server names
-}
-
-# Apply cleaning function to the 'webserver' column
-data <- data %>%
-  mutate(webserver_cleaned = clean_webserver(webserver))
-
-# Check the distribution of the cleaned webserver data
-table(data$webserver_cleaned)
-
-#######################
-### Predict Missing WebServer ###
-#######################
-
-# Convert categorical variables to factors
-data$webserver_cleaned <- as.factor(data$webserver_cleaned)
-data$os_category <- as.factor(data$os_category)
-data$encoding_group <- as.factor(data$encoding_group)
-
-# Separate Data into Training & Testing Sets
-train_data <- data %>% filter(!is.na(webserver_cleaned))
-test_data <- data %>% filter(is.na(webserver_cleaned))
-
-# Train a Random Forest model to predict WebServer category
-if (nrow(test_data) > 0) {
-  model_webserver <- randomForest(webserver_cleaned ~ os_category + year + encoding_group + downtime,
-                                  data = train_data, ntree = 100, importance = TRUE)
-  
-  # Predict missing WebServer values
-  test_data$webserver_cleaned <- predict(model_webserver, test_data)
-  
-  # Update the dataset with predicted values
-  data$webserver_cleaned[is.na(data$webserver_cleaned)] <- test_data$webserver_cleaned
-}
-
-#######################
-### Data Validation ###
-#######################
-
-data$webserver_cleaned <- as.factor(data$webserver_cleaned)
-
-# Count the number of different web server categories and inspect
-webserver_category_count <- table(data$webserver_cleaned)
-cat("Web Server Category Validation:\n")
-print(webserver_category_count)
-
-# Visualize the cleaned web server data
-ggplot(data, aes(x = webserver_cleaned)) +
-  geom_bar(fill = "lightgreen", color = "black") +
-  ggtitle("Final Distribution of Web Server Categories After Prediction") +
-  xlab("Web Server Category") +
-  ylab("Count") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
-
-
 ##########################################################
 ### Data Attribute - Country ###
 ##########################################################
@@ -635,6 +532,109 @@ table(data$encoding_group)
 
 # ensure the encoding is factor 
 data$encoding_group <- as.factor(data$encoding_group)
+
+
+##########################################################
+### Data Attribute - Web Server ###
+##########################################################
+
+########################
+### Data Exploration ###
+########################
+
+# Chech how many data is NA
+print("Missing data - Web Server")
+sum(is.na(data$webserver)) / nrow(data) # 27.76%
+
+##########################
+### Data Preprocessing ###
+##########################
+
+#' Clean and Standardize Web Server Names
+#'
+#' This function takes in a vector of web server names (including versions or additional information) 
+#' and standardizes them by removing extra details and grouping similar servers under a common name.
+#'
+#' @param webserver Character vector: A vector of web server names, which may include versions and other extra information.
+#' 
+#' @return Character vector: A vector of standardized web server names, where each entry is grouped under a common category 
+#' like "IIS", "nginx", "Apache", etc. If no match is found, the function returns `NA` for that entry.
+#'
+clean_webserver <- function(webserver) {
+  # Remove versions and extra information after '/'
+  cleaned <- str_replace_all(webserver, "\\/.*", "")  # Remove everything after '/'
+  
+  # Standardize common web servers by grouping them into broader categories
+  cleaned <- case_when(
+    str_detect(cleaned, "IIS") ~ "IIS",
+    str_detect(cleaned, "nginx") ~ "nginx",
+    str_detect(cleaned, "Apache") ~ "Apache",
+    str_detect(cleaned, "lighttpd") ~ "lighttpd",
+    str_detect(cleaned, "Zeus") ~ "Zeus",
+    str_detect(cleaned, "Tomahawk") ~ "Tomahawk",
+    str_detect(cleaned, "Oracle") ~ "Oracle",
+    str_detect(cleaned, "Sun") ~ "Sun",
+    str_detect(cleaned, "Microsoft") ~ "Microsoft",
+    str_detect(cleaned, "Squid") ~ "Squid",
+    str_detect(cleaned, "Varnish") ~ "Varnish",
+    TRUE ~ NA
+  )
+  
+  return(cleaned)  # Return the cleaned and standardized web server names
+}
+
+# Apply cleaning function to the 'webserver' column
+data <- data %>%
+  mutate(webserver_cleaned = clean_webserver(webserver))
+
+# Check the distribution of the cleaned webserver data
+table(data$webserver_cleaned)
+
+#######################
+### Predict Missing WebServer ###
+#######################
+
+# Convert categorical variables to factors
+data$webserver_cleaned <- as.factor(data$webserver_cleaned)
+data$os_category <- as.factor(data$os_category)
+data$encoding_group <- as.factor(data$encoding_group)
+
+# Separate Data into Training & Testing Sets
+train_data <- data %>% filter(!is.na(webserver_cleaned))
+test_data <- data %>% filter(is.na(webserver_cleaned))
+
+# Train a Random Forest model to predict WebServer category
+if (nrow(test_data) > 0) {
+  model_webserver <- randomForest(webserver_cleaned ~ os_category + year + encoding_group + downtime,
+                                  data = train_data, ntree = 100, importance = TRUE)
+  
+  # Predict missing WebServer values
+  test_data$webserver_cleaned <- predict(model_webserver, test_data)
+  
+  # Update the dataset with predicted values
+  data$webserver_cleaned[is.na(data$webserver_cleaned)] <- test_data$webserver_cleaned
+}
+
+#######################
+### Data Validation ###
+#######################
+
+data$webserver_cleaned <- as.factor(data$webserver_cleaned)
+
+# Count the number of different web server categories and inspect
+webserver_category_count <- table(data$webserver_cleaned)
+cat("Web Server Category Validation:\n")
+print(webserver_category_count)
+
+# Visualize the cleaned web server data
+ggplot(data, aes(x = webserver_cleaned)) +
+  geom_bar(fill = "lightgreen", color = "black") +
+  ggtitle("Final Distribution of Web Server Categories After Prediction") +
+  xlab("Web Server Category") +
+  ylab("Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
 
 
 ##########################################################
@@ -1054,34 +1054,61 @@ ggplot(avg_incidents_continent, aes(x = continent, y = avg_incident_count, fill 
 ############
 #' Goh Xin Tong - TP069712
 #' RQ 5
-#' Which continent consistently experiences the lowest system downtime across multiple years?
+#' Which continent consistently experiences the lowest system downtime across 
+#' multiple years, including predictions for 2016 to 2025?
 
-# Step 1: Identify which continent has the lowest average downtime each year
-min_downtime_per_year <- avg_data %>%
+# Step 1: Calculate average downtime by continent and year (2000-2015)
+avg_data <- data %>%
+  group_by(continent, year) %>%
+  summarise(avg_downtime = mean(downtime, na.rm = TRUE)) %>%
+  ungroup()
+
+# Step 2: Fit a linear model for each continent based on the historical data
+continent_models <- avg_data %>%
+  group_by(continent) %>%
+  do(model = lm(avg_downtime ~ year, data = .)) %>%
+  ungroup()
+
+# Step 3: Predict downtime for 2016-2025 using the model for each continent
+future_years <- data.frame(year = 2016:2025)
+predictions <- future_years %>%
+  crossing(continent_models) %>%
+  mutate(predicted_downtime = map2_dbl(model, year, ~predict(.x, newdata = data.frame(year = .y)))) %>%
+  select(continent, year, predicted_downtime)
+
+# Step 4: Combine the historical data and predicted data
+complete_data <- bind_rows(
+  avg_data %>% select(continent, year, avg_downtime),
+  predictions %>% rename(avg_downtime = predicted_downtime)
+) %>%
+  mutate(avg_downtime = pmax(avg_downtime, 0))  # Ensure non-negative downtime
+
+# Step 5: Identify the continent with the lowest downtime each year (2000-2025)
+min_downtime_all_years <- complete_data %>%
   group_by(year) %>%
   slice(which.min(avg_downtime)) %>%
-  ungroup()  # Select the continent with the lowest downtime for each year
+  ungroup()
 
-# Step 2: Count how many times each continent had the lowest downtime
-continent_min_count <- min_downtime_per_year %>%
+# Step 6: Count how many times each continent had the lowest downtime
+continent_counts <- min_downtime_all_years %>%
   count(continent) %>%
-  rename(min_count = n)
+  rename(total_years = n)
 
-# Step 3: Create the pie chart with labels
-ggplot(continent_min_count, aes(x = "", y = min_count, fill = continent)) +
-  geom_bar(stat = "identity", width = 1) +
-  coord_polar(theta = "y") +  # Convert to pie chart
-  labs(title = "Distribution of Years with Lowest Downtime by Continent") +
-  theme_void() +  # Removes axis labels and ticks
-  theme(legend.title = element_blank()) +  # Removes legend title
-  geom_text(aes(label = paste(continent, "(", min_count, ")", sep = "")), 
-            position = position_stack(vjust = 0.5), 
-            color = "white", size = 5)  # Add labels in white color
+# Step 7: Visualize the downtime trends and identify the continent with the lowest downtime
+ggplot(complete_data, aes(x = year, y = avg_downtime, color = continent)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(data = min_downtime_all_years, aes(x = year, y = avg_downtime), 
+             size = 3, show.legend = FALSE) +
+  geom_vline(xintercept = 2015.5, linetype = "dashed", color = "red") +
+  labs(title = "Downtime Trends and Projections by Continent (2000-2025)",
+       subtitle = "Dotted line indicates start of projections",
+       y = "Average Downtime (hours)",
+       x = "Year") +
+  theme_minimal() +
+  scale_x_continuous(breaks = seq(2000, 2025, 5)) +
+  annotate("text", x = 2018, y = max(complete_data$avg_downtime), 
+           label = "Forecasted Values", color = "red")
 
-
-
-# View the result
-print(continent_max_count)
 
 
 ###############################################################################
