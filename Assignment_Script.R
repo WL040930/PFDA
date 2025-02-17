@@ -1087,6 +1087,146 @@ print(continent_max_count)
 ###############################################################################
 ###############################################################################
 
+##############################
+### CHANG QI EUE - TP065956 ###
+##############################
+
+############
+### RQ 1 ###
+############
+webserver_counts <- data.frame(table(data$webserver_cleaned))
+
+# Generate the bar chart with exact count labels
+ggplot(webserver_counts, aes(x = Var1, y = Freq)) +
+  geom_bar(stat = "identity", fill = "lightblue", color = "black") +
+  ggtitle("Distribution of Web Server Categories") +
+  xlab("Web Server Category") +
+  ylab("Count") +
+  scale_y_continuous(labels = comma) +
+  geom_text(aes(label = comma(Freq)), vjust = -0.3, size = 5) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#########TOP 3################
+
+# Step 1: Calculate the Average Downtime for Each Web Server Type
+avg_downtime_webserver <- data %>%
+  group_by(webserver_cleaned) %>%
+  summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(avg_downtime)) %>%
+  head(3)  
+
+# Step 2: Filter Data for Only the Top 3 Web Servers
+top3_data <- data %>% 
+  filter(webserver_cleaned %in% avg_downtime_webserver$webserver_cleaned)
+
+# Step 3: Create a Box Plot to Compare Downtime for the Top 3 Web Servers
+ggplot(top3_data, aes(x = webserver_cleaned, y = downtime, fill = webserver_cleaned)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 16) +  
+  labs(
+    title = "Top 3 Web Servers with the Highest Downtime",
+    x = "Web Server Type",
+    y = "Downtime Duration (Days)"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "darkblue"),
+    axis.text.y = element_text(face = "bold", color = "darkred"),
+    plot.title = element_text(face = "bold", hjust = 0.5, color = "purple"),
+    legend.position = "none"
+  ) +
+  geom_text(data = avg_downtime_webserver, 
+            aes(x = webserver_cleaned, y = avg_downtime, label = round(avg_downtime, 1)), 
+            vjust = -0.5, size = 5, fontface = "bold", color = "black") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+
+############
+### RQ 2 ###
+############
+# Step 1: Calculate Average Downtime by Year & Web Server
+avg_downtime_per_server <- data %>%
+  group_by(webserver_cleaned, year) %>%
+  summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = "drop")
+
+# Step 2: Plot Heatmap
+ggplot(avg_downtime_per_server, aes(x = year, y = reorder(webserver_cleaned, avg_downtime), fill = avg_downtime)) +
+  geom_tile(color = "white") +
+  scale_fill_gradientn(colors = c("purple4", "blue", "cyan4", "yellowgreen", "yellow"), name = "Avg Downtime") +
+  labs(
+    title = "Heatmap of Downtime by Web Server Age",
+    x = "Year of Web Server",
+    y = "Web Server Type"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 10),
+    plot.title = element_text(face = "bold", hjust = 0.5)
+  )
+
+############
+### RQ 3 ###
+############
+# Step 1: Calculate the average downtime for each web server category
+avg_downtime_webserver <- data %>%
+  group_by(webserver_cleaned) %>%
+  summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(avg_downtime)) 
+
+# Step 2: Create a Bar Plot
+ggplot(avg_downtime_webserver, aes(x = reorder(webserver_cleaned, avg_downtime), 
+                                   y = avg_downtime, fill = webserver_cleaned)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black") +
+  labs(
+    title = "Average Downtime of Each Web Server",
+    x = "Web Server",
+    y = "Average Downtime (Days)"
+  ) +
+  theme_minimal(base_size = 15) +
+  scale_fill_viridis_d() +
+  geom_text(aes(label = round(avg_downtime, 1)), vjust = -0.5, size = 5, 
+            fontface = "bold", color = "black") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+############
+### RQ 4 ###
+############
+# Step 1: Calculate Average Downtime for Each Continent and Web Server Type
+avg_downtime_continent <- data %>%
+  group_by(continent, webserver_cleaned) %>%
+  summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(avg_downtime))
+
+# Step 2: Plot Average Downtime for Each Continent and Web Server
+ggplot(avg_downtime_continent, aes(x = continent, y = avg_downtime, fill = continent)) +
+  geom_bar(stat = "identity", color = "black") +
+  facet_wrap(~ webserver_cleaned, scales = "free_y") +
+  labs(title = "Downtime by Continent for Each Web Server",
+       x = "Continent",
+       y = "Average Downtime (Days)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+############
+### RQ 5 ###
+############
+# Step 1: Calculate the average downtime for each OS-Web Server combination
+avg_downtime_os_webserver <- data %>%
+  group_by(os_category, webserver_cleaned) %>%
+  summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(avg_downtime))  
+
+# Step 2: Create a Heatmap Visualization
+ggplot(avg_downtime_os_webserver, aes(x = webserver_cleaned, y = os_category, fill = avg_downtime)) +
+  geom_tile(color = "white") +
+  labs(
+    title = "Impact of OS and Web Server Type on Downtime",
+    x = "Web Server",
+    y = "Operating System",
+    fill = "Avg Downtime (Days)"
+  ) +
+  scale_fill_viridis_c(option = "plasma") + 
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ###############################################################################
 ###############################################################################
