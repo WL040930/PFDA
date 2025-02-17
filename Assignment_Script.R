@@ -1313,26 +1313,6 @@ ggplot(data, aes(x = encoding_category, y = downtime, fill = encoding_category))
 ### RQ 2 ####
 #############
 
-### What is the average downtime for each encoding format? ###
-### step 1 : Take the top 10 codes with the highest downtime ###
-top_encodings <- data %>%
-  group_by(encoding) %>%
-  summarise(mean_downtime = mean(downtime, na.rm = TRUE)) %>%
-  arrange(desc(mean_downtime)) %>%
-  top_n(10, mean_downtime)  
-
-### step 2 : Bar Chart Visualization ###
-ggplot(top_encodings, aes(x = reorder(encoding, -mean_downtime), y = mean_downtime, fill = encoding)) +
-  geom_bar(stat = "identity") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Top 10 codes with the most downtime",
-       x = "Encoding",
-       y = "Average downtime (downtime)")
-
-#############
-### RQ 3 ####
-#############
-
 ### Is there a significant relationship between encoding types and average downtime for different web servers?  ###
 ### step 1 : Filter out N and NA ###
 data_filtered <- data %>%
@@ -1366,6 +1346,26 @@ ggplot(data_filtered, aes(x = webserver, y = encoding, fill = downtime)) +
        y = "Encoding",
        fill = "Avg Downtime") +
   theme_minimal()
+
+#############
+### RQ 3 ####
+#############
+
+### What is the average downtime for each encoding format? ###
+### step 1 : Take the top 10 codes with the highest downtime ###
+top_encodings <- data %>%
+  group_by(encoding) %>%
+  summarise(mean_downtime = mean(downtime, na.rm = TRUE)) %>%
+  arrange(desc(mean_downtime)) %>%
+  top_n(10, mean_downtime)  
+
+### step 2 : Bar Chart Visualization ###
+ggplot(top_encodings, aes(x = reorder(encoding, -mean_downtime), y = mean_downtime, fill = encoding)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Top 10 codes with the most downtime",
+       x = "Encoding",
+       y = "Average downtime (downtime)")
 
 #############
 ### RQ 4 ###
