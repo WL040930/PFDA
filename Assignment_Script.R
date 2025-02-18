@@ -1121,20 +1121,6 @@ ggplot(complete_data, aes(x = year, y = avg_downtime, color = continent)) +
 ############
 ### RQ 1 ###
 ############
-webserver_counts <- data.frame(table(data$webserver_cleaned))
-
-# Generate the bar chart with exact count labels
-ggplot(webserver_counts, aes(x = Var1, y = Freq)) +
-  geom_bar(stat = "identity", fill = "lightblue", color = "black") +
-  ggtitle("Distribution of Web Server Categories") +
-  xlab("Web Server Category") +
-  ylab("Count") +
-  scale_y_continuous(labels = comma) +
-  geom_text(aes(label = comma(Freq)), vjust = -0.3, size = 5) + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-#########TOP 3################
-
 # Step 1: Calculate the Average Downtime for Each Web Server Type
 avg_downtime_webserver <- data %>%
   group_by(webserver_cleaned) %>%
