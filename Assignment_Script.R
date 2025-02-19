@@ -976,24 +976,6 @@ ggplot(downtime_trends, aes(x = year, y = n, color = continent, group = continen
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
 
-###########################
-# Step 1: Create a summary table that counts downtime incidents for each continent and year
-downtime_summary <- data %>%
-  count(continent, year)  # Counting incidents per continent-year combination
-
-# Step 2: Create a stacked bar chart to show the distribution of downtime incidents across continents and years
-ggplot(downtime_summary, aes(x = year, y = n, fill = continent)) +
-  geom_bar(stat = "identity") +  # Stack bars for each year
-  labs(
-    title = "Distribution of Downtime Incidents Across Years by Continent",
-    x = "Year",
-    y = "Number of Downtime Incidents",
-    fill = "Continent"
-  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
-############################
-
 
 ############
 ### RQ 3 ###
@@ -1067,51 +1049,57 @@ ggplot(avg_incidents_continent, aes(x = continent, y = avg_incident_count, fill 
 #' Which continent consistently experiences the lowest system downtime across 
 #' multiple years, including predictions for 2016 to 2025?
 
-# Step 1: Aggregate average downtime by year and continent
+# Step 1: Calculate average downtime by continent and year (2000-2015)
 avg_data <- data %>%
   group_by(continent, year) %>%
-  summarise(avg_downtime = mean(downtime, na.rm = TRUE), .groups = "drop")
+  summarise(avg_downtime = mean(downtime, na.rm = TRUE)) %>%
+  ungroup()
 
-# Step 2: Fit a GAM model for each continent
+# Step 2: Fit a linear model for each continent based on the historical data
+continent_models <- avg_data %>%
+  group_by(continent) %>%
+  do(model = lm(avg_downtime ~ year, data = .)) %>%
+  ungroup()
+
+# Step 3: Predict downtime for 2016-2025 using the model for each continent
 future_years <- data.frame(year = 2016:2025)
-predictions <- list()
+predictions <- future_years %>%
+  crossing(continent_models) %>%
+  mutate(predicted_downtime = map2_dbl(model, year, ~predict(.x, newdata = data.frame(year = .y)))) %>%
+  select(continent, year, predicted_downtime)
 
-for (continent in unique(avg_data$continent)) {
-  continent_data <- filter(avg_data, continent == !!continent)
-  
-  if (nrow(continent_data) >= 5) {  # Ensure enough data points for modeling
-    model <- gam(avg_downtime ~ s(year), data = continent_data)  # Use smoothing function
-    
-    # Predict future values
-    pred_df <- future_years
-    pred_df$continent <- continent
-    pred_df$avg_downtime <- predict(model, newdata = pred_df, type = "response")
-    
-    predictions[[continent]] <- pred_df
-  }
-}
-
-# Step 3: Combine historical and predicted data
-predictions_df <- bind_rows(predictions)
-
+# Step 4: Combine the historical data and predicted data
 complete_data <- bind_rows(
-  avg_data,  # Historical data
-  predictions_df # Forecasted data
+  avg_data %>% select(continent, year, avg_downtime),
+  predictions %>% rename(avg_downtime = predicted_downtime)
 ) %>%
   mutate(avg_downtime = pmax(avg_downtime, 0))  # Ensure non-negative downtime
 
-# Step 4: Plot the downtime trends with GAM predictions
+# Step 5: Identify the continent with the lowest downtime each year (2000-2025)
+min_downtime_all_years <- complete_data %>%
+  group_by(year) %>%
+  slice(which.min(avg_downtime)) %>%
+  ungroup()
+
+# Step 6: Count how many times each continent had the lowest downtime
+continent_counts <- min_downtime_all_years %>%
+  count(continent) %>%
+  rename(total_years = n)
+
+# Step 7: Visualize the downtime trends and identify the continent with the lowest downtime
 ggplot(complete_data, aes(x = year, y = avg_downtime, color = continent)) +
   geom_line(linewidth = 1.2) +
-  geom_point(size = 2) +
+  geom_point(data = min_downtime_all_years, aes(x = year, y = avg_downtime), 
+             size = 3, show.legend = FALSE) +
   geom_vline(xintercept = 2015.5, linetype = "dashed", color = "red") +
-  labs(title = "Downtime Trends and Forecast by Continent (2000-2025)",
-       subtitle = "Dotted line indicates forecasted values",
-       y = "Average Downtime (Days)",
+  labs(title = "Downtime Trends and Projections by Continent (2000-2025)",
+       subtitle = "Dotted line indicates start of projections",
+       y = "Average Downtime (hours)",
        x = "Year") +
   theme_minimal() +
-  scale_x_continuous(breaks = seq(2000, 2025, 5))
-
+  scale_x_continuous(breaks = seq(2000, 2025, 5)) +
+  annotate("text", x = 2018, y = max(complete_data$avg_downtime), 
+           label = "Forecasted Values", color = "red")
 
 
 
